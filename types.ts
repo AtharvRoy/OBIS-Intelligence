@@ -34,6 +34,16 @@ export interface Client {
   insightHistory: InsightHistoryItem[];
 }
 
+export interface MenuItem {
+  name: string;
+  price: number;
+  cost: number;
+  sold: number;
+  contribution: number;
+  popularityRank: number;
+  profitRank: number;
+}
+
 export interface MonthlyRecord {
   clientId: string;
   month: string;
@@ -53,6 +63,7 @@ export interface MonthlyRecord {
     discounts: number;
   };
   topItems: string[];
+  menuItems?: MenuItem[]; // New granular tracking
   dataQualityScore: number;
 }
 
@@ -67,6 +78,8 @@ export interface BusinessSummary {
   staffCostPct: number;
   onlineDependencyPct: number;
   dataQuality: number;
+  bestItem?: MenuItem;
+  worstItem?: MenuItem;
   deltas?: {
     revenue: number;
     margin: number;
@@ -76,14 +89,6 @@ export interface BusinessSummary {
     netProfit: number;
     orders: number;
   };
-}
-
-export interface AiInsight {
-  observation: string;
-  importance: string;
-  recommendation: string;
-  impactPotential: string;
-  promptVersion: string;
 }
 
 export interface Benchmark {
@@ -104,11 +109,10 @@ export interface CostCategory {
   value: number;
 }
 
-export interface MenuItem {
-  name: string;
-  price: number;
-  sold: number;
-  contribution: number;
-  popularityRank: number;
-  profitRank: number;
+export interface AiInsight {
+  observation: string;
+  importance: string;
+  recommendation: string;
+  impactPotential: string;
+  promptVersion: string;
 }

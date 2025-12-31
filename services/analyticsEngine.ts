@@ -1,9 +1,8 @@
 
-import { MonthlyRecord, BusinessSummary, RiskLevel, PerformanceMetadata, PerformanceBandLevel } from '../types';
-import { BENCHMARKS } from '../constants';
+import { MonthlyRecord, BusinessSummary, RiskLevel, PerformanceMetadata, PerformanceBandLevel, MenuItem } from '../types';
 
 export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?: MonthlyRecord): BusinessSummary {
-  const { revenue, costs } = currentRecord;
+  const { revenue, costs, menuItems = [] } = currentRecord;
   const totalCosts = Object.values(costs).reduce((a, b) => a + b, 0);
   const netProfit = revenue.total - totalCosts;
   const margin = (netProfit / revenue.total) * 100;
@@ -12,6 +11,18 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   const staffCostPct = (costs.staff / revenue.total) * 100;
   const marketingPct = (costs.marketing / revenue.total) * 100;
   const onlineDependencyPct = (revenue.online / revenue.total) * 100;
+
+  // Granular Menu Analysis
+  let bestItem: MenuItem | undefined;
+  let worstItem: MenuItem | undefined;
+
+  if (menuItems.length > 0) {
+    const sortedByProfit = [...menuItems].sort((a, b) => b.contribution - a.contribution);
+    const sortedByEfficiency = [...menuItems].sort((a, b) => (a.cost/a.price) - (b.cost/b.price));
+    
+    bestItem = sortedByProfit[0];
+    worstItem = sortedByEfficiency[sortedByEfficiency.length - 1]; // Highest cost-to-price ratio
+  }
 
   // Metadata Classification
   let level: PerformanceBandLevel = 'Healthy';
@@ -27,7 +38,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   } else if (margin < 15 || foodCostPct > 33 || onlineDependencyPct > 60) {
     level = 'Weak';
     riskLevel = 'Medium';
-    reason = margin < 15 ? 'Profitability is trailing the 18% target.' : 'External dependency (Online/Costs) is high.';
+    reason = margin < 15 ? 'Profitability is trailing the target.' : 'External dependency is high.';
     driver = onlineDependencyPct > 60 ? 'Platform Commissions' : 'Menu Costing';
   }
 
@@ -54,13 +65,17 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
 
   // Narrative Assembly
   const narrative = {
-    health: `The business is currently operating at a ${level} level with a ${margin.toFixed(1)}% net margin.`,
-    change: deltas 
-      ? `Compared to last month, revenue is ${deltas.revenue > 0 ? 'up' : 'down'} by ${Math.abs(deltas.revenue).toFixed(0)}%, while food cost changed by ${deltas.foodCost.toFixed(1)}pp.`
-      : 'This is the initial baseline for the pilot period.',
-    action: level === 'Healthy' 
-      ? 'Focus on scale and volume to increase total net profit.' 
-      : `Prioritize reducing ${driver} to restore the net margin to 18%.`
+    health: `The business is currently operating at a ${level} level. Net margin is ${margin.toFixed(1)}%.`,
+    change: bestItem 
+      ? `${bestItem.name} is your top anchor (₹${bestItem.contribution.toLocaleString()} profit contribution), while ${worstItem?.name} is your highest cost-drag item.`
+      : deltas 
+        ? `Revenue is ${deltas.revenue > 0 ? 'up' : 'down'} by ${Math.abs(deltas.revenue).toFixed(0)}%, but online dependency shifted by ${deltas.onlineDependency.toFixed(1)}pp.`
+        : 'Initial pilot baseline created.',
+    action: worstItem && (worstItem.cost/worstItem.price) > 0.45
+      ? `Audit the preparation cost of ${worstItem.name} immediately; it is currently cannibalizing your margin.`
+      : level === 'Healthy' 
+        ? 'Increase marketing spend on high-margin items to scale profit.' 
+        : `Address ${driver} issues to restore health.`
   };
 
   const performanceBand: PerformanceMetadata = { level, reason, driver, narrative };
@@ -76,6 +91,8 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     staffCostPct,
     onlineDependencyPct,
     dataQuality: currentRecord.dataQualityScore,
+    bestItem,
+    worstItem,
     deltas
   };
 }

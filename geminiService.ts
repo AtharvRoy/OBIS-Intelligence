@@ -3,7 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { BusinessSummary, AiInsight, InsightHistoryItem } from './types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const PROMPT_VERSION = "v1.4.0-history-aware";
+const PROMPT_VERSION = "v1.5.0-menu-aware";
 
 export const generateInsights = async (
   summary: BusinessSummary,
@@ -18,7 +18,9 @@ export const generateInsights = async (
     performanceReason: summary.performanceBand.reason,
     onlineDependency: `${summary.onlineDependencyPct.toFixed(0)}%`,
     revenueDelta: summary.deltas ? `${summary.deltas.revenue.toFixed(1)}%` : 'N/A',
-    topItems: topItems.join(', ')
+    topItems: topItems.join(', '),
+    bestItem: summary.bestItem ? `${summary.bestItem.name} (Profit Anchor)` : 'None identified',
+    worstItem: summary.worstItem ? `${summary.worstItem.name} (Efficiency Leak)` : 'None identified'
   };
 
   const historyContext = history.length > 0 
@@ -30,25 +32,22 @@ export const generateInsights = async (
     
     Objective:
     - Analyze the current performance metrics.
-    - Review the historical context to ensure continuity and track progress.
-    - Provide consistent, actionable insights that don't contradict previous advice unless the data shows a clear shift.
+    - Specifically address the Profit Anchor (${metrics.bestItem}) and Efficiency Leak (${metrics.worstItem}).
+    - Review history to ensure continuity.
 
     Context:
     - Current Metrics: ${JSON.stringify(metrics)}
     - ${historyContext}
 
-    Prompt Version: ${PROMPT_VERSION}
-
     Tasks:
-    1. Identify the top 3 critical business problems. If a previous problem persists, acknowledge it or refine the strategy.
-    2. Explain the financial importance of each.
-    3. Suggest 3 practical, "owner-friendly" recommendations.
-    4. Estimate the impact potential for each (e.g., "High", "Medium", "Low").
+    1. Identify the top 3 critical business problems. Acknowledge if specific food items are causing cost spikes.
+    2. Explain the financial importance (e.g., how much margin is being leaked).
+    3. Suggest 3 practical, "owner-friendly" recommendations (e.g., recipe auditing for the Efficiency Leak item).
+    4. Estimate the impact potential ("High", "Medium", "Low").
 
     Guidelines:
     - Avoid jargon. Be the "thinking assistant".
-    - Focus on the Narrative Order: Business Health -> What Changed -> Why It Matters -> What To Do Next.
-    - Be realistic and conservative.
+    - Focus on the Narrative Order: Business Health -> Food Item Impact -> Why It Matters -> What To Do Next.
 
     Structure the response as a JSON array of objects with keys: observation, importance, recommendation, and impactPotential.
   `;
