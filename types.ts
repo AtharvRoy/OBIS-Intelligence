@@ -1,7 +1,25 @@
 
-export type ClientStatus = 'Pilot' | 'Active' | 'Inactive';
+export type ClientStatus = 'pilot' | 'active' | 'paused' | 'inactive';
 export type RiskLevel = 'Low' | 'Medium' | 'High';
-export type PerformanceBand = 'Healthy' | 'Weak' | 'Dangerous';
+export type PerformanceBandLevel = 'Healthy' | 'Weak' | 'Dangerous';
+
+export interface PerformanceMetadata {
+  level: PerformanceBandLevel;
+  reason: string;
+  driver: string;
+  narrative: {
+    health: string;
+    change: string;
+    action: string;
+  };
+}
+
+export interface InsightHistoryItem {
+  month: string;
+  problems: string[];
+  actions: string[];
+  timestamp: string;
+}
 
 export interface Client {
   id: string;
@@ -12,6 +30,8 @@ export interface Client {
   pricingLevel: 'Mid' | 'High';
   status: ClientStatus;
   startMonth: string;
+  lastUpdatedAt: string;
+  insightHistory: InsightHistoryItem[];
 }
 
 export interface MonthlyRecord {
@@ -33,6 +53,7 @@ export interface MonthlyRecord {
     discounts: number;
   };
   topItems: string[];
+  dataQualityScore: number;
 }
 
 export interface BusinessSummary {
@@ -41,10 +62,20 @@ export interface BusinessSummary {
   netProfit: number;
   margin: number;
   riskLevel: RiskLevel;
-  performanceBand: PerformanceBand;
+  performanceBand: PerformanceMetadata;
   foodCostPct: number;
   staffCostPct: number;
   onlineDependencyPct: number;
+  dataQuality: number;
+  deltas?: {
+    revenue: number;
+    margin: number;
+    foodCost: number;
+    onlineDependency: number;
+    marketing: number;
+    netProfit: number;
+    orders: number;
+  };
 }
 
 export interface AiInsight {
@@ -52,25 +83,29 @@ export interface AiInsight {
   importance: string;
   recommendation: string;
   impactPotential: string;
+  promptVersion: string;
+}
+
+export interface Benchmark {
+  foodCostPct: { healthy: [number, number], label: string };
+  staffCostPct: { healthy: [number, number], label: string };
+  netMargin: { healthy: [number, number], label: string };
+  marketingPct: { healthy: [number, number], label: string };
 }
 
 export interface RevenueData {
   channel: string;
   gross: number;
   net: number;
-  commissions: number;
-  discounts: number;
 }
 
 export interface CostCategory {
   name: string;
   value: number;
-  benchmark: number;
 }
 
 export interface MenuItem {
   name: string;
-  cost: number;
   price: number;
   sold: number;
   contribution: number;

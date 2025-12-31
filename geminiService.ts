@@ -1,41 +1,56 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { BusinessSummary } from './types';
+import { BusinessSummary, AiInsight, InsightHistoryItem } from './types';
 
-// Initialize the Google GenAI client with the mandatory process.env.API_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const PROMPT_VERSION = "v1.4.0-history-aware";
 
 export const generateInsights = async (
   summary: BusinessSummary,
-  topItems: string[]
-) => {
-  // MASTER AI PROMPT implementation
+  topItems: string[],
+  history: InsightHistoryItem[] = []
+): Promise<AiInsight[]> => {
   const metrics = {
     netMargin: `${summary.margin.toFixed(1)}%`,
     foodCost: `${summary.foodCostPct.toFixed(1)}%`,
     staffCost: `${summary.staffCostPct.toFixed(1)}%`,
-    performanceBand: summary.performanceBand,
+    performanceBand: summary.performanceBand.level,
+    performanceReason: summary.performanceBand.reason,
     onlineDependency: `${summary.onlineDependencyPct.toFixed(0)}%`,
+    revenueDelta: summary.deltas ? `${summary.deltas.revenue.toFixed(1)}%` : 'N/A',
     topItems: topItems.join(', ')
   };
 
+  const historyContext = history.length > 0 
+    ? `Historical Context (Previous Recommendations):\n${history.slice(0, 3).map(h => `- ${h.month}: Problems [${h.problems.join(', ')}], Recommended Actions [${h.actions.join(', ')}]`).join('\n')}`
+    : "No previous historical data available for this client.";
+
   const prompt = `
     You are a restaurant business intelligence assistant (OBIS Internal Analyst).
+    
+    Objective:
+    - Analyze the current performance metrics.
+    - Review the historical context to ensure continuity and track progress.
+    - Provide consistent, actionable insights that don't contradict previous advice unless the data shows a clear shift.
+
     Context:
-    - This is a monthly performance review for a client.
-    - This is NOT accounting or tax advice.
-    - Use simple, professional language.
+    - Current Metrics: ${JSON.stringify(metrics)}
+    - ${historyContext}
 
-    Given the metrics: ${JSON.stringify(metrics)}
+    Prompt Version: ${PROMPT_VERSION}
 
-    Do the following:
-    1. Identify the top 3 business problems.
-    2. Explain why each problem matters financially.
-    3. Suggest 3 practical actions for next month.
-    4. Avoid technical jargon.
-    5. Do NOT promise profit or guarantees.
+    Tasks:
+    1. Identify the top 3 critical business problems. If a previous problem persists, acknowledge it or refine the strategy.
+    2. Explain the financial importance of each.
+    3. Suggest 3 practical, "owner-friendly" recommendations.
+    4. Estimate the impact potential for each (e.g., "High", "Medium", "Low").
 
-    Structure the response as a JSON array of objects with the keys: observation, importance, recommendation, and impactPotential.
+    Guidelines:
+    - Avoid jargon. Be the "thinking assistant".
+    - Focus on the Narrative Order: Business Health -> What Changed -> Why It Matters -> What To Do Next.
+    - Be realistic and conservative.
+
+    Structure the response as a JSON array of objects with keys: observation, importance, recommendation, and impactPotential.
   `;
 
   try {
@@ -63,7 +78,8 @@ export const generateInsights = async (
     const text = response.text;
     if (!text) return [];
 
-    return JSON.parse(text.trim());
+    const parsed = JSON.parse(text.trim());
+    return parsed.map((item: any) => ({ ...item, promptVersion: PROMPT_VERSION }));
   } catch (error) {
     console.error("Error generating insights:", error);
     return [];
