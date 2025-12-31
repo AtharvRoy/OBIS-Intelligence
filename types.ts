@@ -1,6 +1,7 @@
 
 export type ClientStatus = 'Pilot' | 'Active' | 'Inactive';
 export type RiskLevel = 'Low' | 'Medium' | 'High';
+export type PerformanceBand = 'Healthy' | 'Weak' | 'Dangerous';
 
 export interface Client {
   id: string;
@@ -40,8 +41,10 @@ export interface BusinessSummary {
   netProfit: number;
   margin: number;
   riskLevel: RiskLevel;
+  performanceBand: PerformanceBand;
   foodCostPct: number;
   staffCostPct: number;
+  onlineDependencyPct: number;
 }
 
 export interface AiInsight {
@@ -51,7 +54,6 @@ export interface AiInsight {
   impactPotential: string;
 }
 
-// Data structures for revenue breakdown by channel
 export interface RevenueData {
   channel: string;
   gross: number;
@@ -60,14 +62,12 @@ export interface RevenueData {
   discounts: number;
 }
 
-// Data structures for cost analysis
 export interface CostCategory {
   name: string;
   value: number;
   benchmark: number;
 }
 
-// Detailed menu item performance metrics
 export interface MenuItem {
   name: string;
   cost: number;

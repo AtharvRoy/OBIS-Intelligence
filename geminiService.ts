@@ -1,25 +1,41 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { BusinessSummary, RevenueData, CostCategory, MenuItem } from './types';
+import { BusinessSummary } from './types';
 
 // Initialize the Google GenAI client with the mandatory process.env.API_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateInsights = async (
   summary: BusinessSummary,
-  revenue: RevenueData[],
-  costs: CostCategory[],
-  menu: MenuItem[]
+  topItems: string[]
 ) => {
-  const prompt = `
-    Act as a Senior Business Consultant for high-end restaurants in Hyderabad.
-    Analyze this data for a restaurant:
-    - Summary: ${JSON.stringify(summary)}
-    - Revenue breakdown: ${JSON.stringify(revenue)}
-    - Cost structure: ${JSON.stringify(costs)}
-    - Menu performance: ${JSON.stringify(menu)}
+  // MASTER AI PROMPT implementation
+  const metrics = {
+    netMargin: `${summary.margin.toFixed(1)}%`,
+    foodCost: `${summary.foodCostPct.toFixed(1)}%`,
+    staffCost: `${summary.staffCostPct.toFixed(1)}%`,
+    performanceBand: summary.performanceBand,
+    onlineDependency: `${summary.onlineDependencyPct.toFixed(0)}%`,
+    topItems: topItems.join(', ')
+  };
 
-    Provide 4 actionable insights. For each insight, explain the observation, why it matters, a recommendation, and the potential profit impact.
+  const prompt = `
+    You are a restaurant business intelligence assistant (OBIS Internal Analyst).
+    Context:
+    - This is a monthly performance review for a client.
+    - This is NOT accounting or tax advice.
+    - Use simple, professional language.
+
+    Given the metrics: ${JSON.stringify(metrics)}
+
+    Do the following:
+    1. Identify the top 3 business problems.
+    2. Explain why each problem matters financially.
+    3. Suggest 3 practical actions for next month.
+    4. Avoid technical jargon.
+    5. Do NOT promise profit or guarantees.
+
+    Structure the response as a JSON array of objects with the keys: observation, importance, recommendation, and impactPotential.
   `;
 
   try {
@@ -44,11 +60,8 @@ export const generateInsights = async (
       },
     });
 
-    // Extract text output from response property as per guidelines
     const text = response.text;
-    if (!text) {
-      return [];
-    }
+    if (!text) return [];
 
     return JSON.parse(text.trim());
   } catch (error) {
