@@ -43,7 +43,7 @@ export interface Client {
   lastUpdatedAt: string;
   insightHistory: InsightHistoryItem[];
   decisionLog: DecisionLogEntry[]; 
-  currentInsights?: AiInsight[]; // Persistent storage for generated insights
+  currentInsights?: AiInsight[]; 
 }
 
 export interface MenuItem {
@@ -95,6 +95,7 @@ export interface BusinessSummary {
   attentionScore: number; 
   bestItem?: MenuItem;
   worstItem?: MenuItem;
+  rankedMenuItems: MenuItem[];
   deltas?: {
     revenue: number;
     margin: number;

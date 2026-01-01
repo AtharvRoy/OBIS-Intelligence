@@ -223,39 +223,34 @@ const App: React.FC = () => {
   const handleSaveData = (data: any) => {
     if (!selectedClientId) return;
     
-    // Create new record
+    // One single point of entry for normalization
     const newRecord: MonthlyRecord = {
       clientId: selectedClientId,
       month: activeRecord?.month || new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
       revenue: {
-        total: data.revenue,
-        online: data.online,
-        offline: data.revenue - data.online,
-        orders: data.orders || 0
+        total: Number(data.revenue),
+        online: Number(data.online),
+        offline: Number(data.revenue) - Number(data.online),
+        orders: Number(data.orders) || 0
       },
       costs: {
-        food: data.foodCost,
-        staff: data.staff,
-        rent: data.rent || 0,
-        utilities: data.utilities || 0,
-        marketing: data.marketing || 0,
-        packaging: data.packaging || 0,
-        discounts: data.discounts || 0
+        food: Number(data.foodCost),
+        staff: Number(data.staff),
+        rent: Number(data.rent) || 0,
+        utilities: Number(data.utilities) || 0,
+        marketing: Number(data.marketing) || 0,
+        packaging: Number(data.packaging) || 0,
+        discounts: Number(data.discounts) || 0
       },
       topItems: data.menuItems?.slice(0, 3).map((i: any) => i.name) || [],
-      menuItems: data.menuItems,
-      dataQualityScore: data.dataQualityScore
+      menuItems: data.menuItems?.map((i: any) => ({
+        ...i,
+        price: Number(i.price),
+        cost: Number(i.cost),
+        sold: Number(i.sold)
+      })),
+      dataQualityScore: Number(data.dataQualityScore)
     };
-
-    // Calculate Ranks immediately via engine before saving to ensure persistence
-    const tempSummary = runAnalyticsEngine(newRecord, previousRecord);
-    if (tempSummary.bestItem) {
-      newRecord.menuItems = newRecord.menuItems?.map(item => ({
-        ...item,
-        popularityRank: tempSummary.bestItem?.name === item.name ? 1 : (item.popularityRank || 2),
-        profitRank: tempSummary.bestItem?.name === item.name ? 1 : (item.profitRank || 2)
-      }));
-    }
 
     setRecords(prev => ({ 
       ...prev, 
@@ -426,7 +421,8 @@ const App: React.FC = () => {
                   </div>
                 ) : <p className="text-slate-400 font-medium italic">No decisions logged yet.</p>}
               </div>
-              {activeRecord.menuItems && <MenuIntelligence menu={activeRecord.menuItems} />}
+              {/* VITAL FIX: Rendering the derived ranked items from summary */}
+              {summary.rankedMenuItems && <MenuIntelligence menu={summary.rankedMenuItems} />}
             </div>
           )}
           

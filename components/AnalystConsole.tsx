@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Box,
   Users,
-  Utensils
+  Utensils,
+  Map
 } from 'lucide-react';
 import { BusinessSummary } from '../types';
 import { BENCHMARKS } from '../constants';
@@ -53,7 +54,6 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
     return 'bg-emerald-500 text-white';
   };
 
-  // Dynamic Tactic Generator based on business drivers
   const getStrategicTactics = (driver: string) => {
     const tactics = {
       'Procurement & Waste': [
@@ -85,8 +85,32 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
 
     return (
       <div className="space-y-16 animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-5xl mx-auto pb-20">
+        
+        {/* NARRATIVE ORDER: PRESENTATION FLOW GUIDE */}
+        <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <Map className="w-5 h-5 text-blue-600" />
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Narrative Order: Meeting Flow</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Business Health', icon: ShieldCheck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+              { label: 'What Changed', icon: Activity, color: 'text-blue-600', bg: 'bg-blue-50' },
+              { label: 'Why It Matters', icon: Lightbulb, color: 'text-amber-600', bg: 'bg-amber-50' },
+              { label: 'What To Do Next', icon: Target, color: 'text-rose-600', bg: 'bg-rose-50' }
+            ].map((step, i) => (
+              <div key={i} className={`flex items-center gap-3 p-4 rounded-2xl ${step.bg} border border-white`}>
+                <div className={`w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm ${step.color}`}>
+                  <step.icon className="w-4 h-4" />
+                </div>
+                <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-tight">{step.label}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* STEP 1: BUSINESS HEALTH */}
-        <section className="relative group">
+        <section id="health" className="relative group">
           <div className="flex items-center gap-5 mb-8">
             <span className="flex-none w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-lg shadow-xl ring-8 ring-slate-50">1</span>
             <div className="h-px bg-slate-200 flex-1"></div>
@@ -112,7 +136,7 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
         </section>
 
         {/* STEP 2: WHAT CHANGED */}
-        <section className="relative">
+        <section id="changes" className="relative">
           <div className="flex items-center gap-5 mb-8">
             <span className="flex-none w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-lg shadow-xl ring-8 ring-slate-50">2</span>
             <div className="h-px bg-slate-200 flex-1"></div>
@@ -147,7 +171,7 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
         </section>
 
         {/* STEP 3: WHY IT MATTERS */}
-        <section className="relative">
+        <section id="insights" className="relative">
           <div className="flex items-center gap-5 mb-8">
             <span className="flex-none w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-lg shadow-xl ring-8 ring-slate-50">3</span>
             <div className="h-px bg-slate-200 flex-1"></div>
@@ -167,7 +191,7 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
         </section>
 
         {/* STEP 4: STRATEGIC ROADMAP (EXECUTIVE STYLE) */}
-        <section className="relative">
+        <section id="roadmap" className="relative">
           <div className="flex items-center gap-5 mb-8">
             <span className="flex-none w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-lg shadow-xl ring-8 ring-slate-50">4</span>
             <div className="h-px bg-slate-200 flex-1"></div>
@@ -175,7 +199,6 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
           </div>
           
           <div className="bg-slate-950 text-white p-16 lg:p-24 rounded-[5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden border border-slate-800/50">
-            {/* Elegant Background Accents */}
             <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
               <div className="absolute -top-1/2 -right-1/4 w-[800px] h-[800px] bg-blue-600/10 rounded-full blur-[120px]"></div>
               <div className="absolute -bottom-1/2 -left-1/4 w-[600px] h-[600px] bg-emerald-600/10 rounded-full blur-[100px]"></div>
@@ -223,7 +246,7 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
                   </div>
                   <div>
                     <p className="text-xs font-black text-slate-300">OBIS Strategic Intelligence</p>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Decision Confidence: 94%</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Decision Confidence: {summary.dataQuality}%</p>
                   </div>
                 </div>
                 <button className="flex items-center gap-4 text-xs font-black uppercase tracking-[0.4em] text-slate-500 hover:text-white transition-all group/btn">
@@ -265,7 +288,6 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
         </div>
       </div>
 
-      {/* 2. NARRATIVE ORDER: What Changed (Metric Grid) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         <StatCard 
           label="Revenue Scale" 
@@ -282,7 +304,7 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
         <StatCard 
           label="Food Efficiency" 
           value={`${summary.foodCostPct.toFixed(0)}%`} 
-          subValue={meetingMode ? "vs 30% Ideal" : `Drift: ${deltas?.foodCost?.toFixed(1)}pp`}
+          subValue={summary.foodCostPct <= 33 ? "Within Control" : "Stable"}
           color={summary.foodCostPct > 33 ? 'red' : 'green'}
           icon={<Target className="w-5 h-5" />}
           trend={deltas ? {
@@ -312,7 +334,6 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
         />
       </div>
 
-      {/* 3. NARRATIVE ORDER: Why it Matters (Internal Details) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         <div className="bg-white p-12 rounded-[3rem] border border-slate-200 shadow-sm">
           <h3 className="text-2xl font-black mb-10 flex items-center gap-3 text-slate-900">
@@ -338,12 +359,10 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
                     </span>
                   </div>
                   <div className="h-4 bg-slate-100 rounded-full relative overflow-hidden">
-                    {/* Safe Zone Marker */}
                     <div 
                       className="absolute top-0 bottom-0 bg-emerald-100/50 border-x border-emerald-200/50 z-0"
                       style={{ left: `${safeZoneLeft}%`, width: `${safeZoneWidth}%` }}
                     />
-                    {/* Actual Value Bar */}
                     <div 
                       className={`h-full transition-all relative z-10 ${isSafe ? 'bg-emerald-500' : 'bg-rose-500'}`} 
                       style={{ width: `${Math.min(100, (b.val / (b.range[1] * 2)) * 100)}%` }} 

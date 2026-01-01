@@ -3,12 +3,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Save, ShieldAlert, Sparkles, Info, HelpCircle, Plus, Trash2, UtensilsCrossed, Tag } from 'lucide-react';
 import { MenuItem, MonthlyRecord } from '../types';
 
+/* Fix: Added missing DataInputFormProps interface definition */
 interface DataInputFormProps {
   onSave: (data: any) => void;
-  initialData?: MonthlyRecord | null;
+  initialData: MonthlyRecord | null;
 }
 
-// Format number to Indian system (en-IN)
 const formatIndianNumber = (val: number | string) => {
   if (val === 0 || val === '0' || val === '') return '';
   const num = typeof val === 'string' ? parseFloat(val.replace(/,/g, '')) : val;
@@ -16,10 +16,9 @@ const formatIndianNumber = (val: number | string) => {
   return num.toLocaleString('en-IN');
 };
 
-// Parse formatted string back to raw number
 const parseRawNumber = (val: string) => {
   const cleaned = val.replace(/,/g, '');
-  const num = parseInt(cleaned, 10);
+  const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 };
 
@@ -48,8 +47,8 @@ const FormattedInputField: React.FC<FormattedInputProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target;
-    const rawValue = input.value.replace(/[^0-9]/g, '');
-    const numValue = rawValue === '' ? 0 : parseInt(rawValue, 10);
+    const rawValue = input.value.replace(/[^0-9.]/g, '');
+    const numValue = rawValue === '' ? 0 : parseFloat(rawValue);
     
     const cursor = input.selectionStart || 0;
     const oldLength = input.value.length;
@@ -88,7 +87,7 @@ const FormattedInputField: React.FC<FormattedInputProps> = ({
         <input 
           ref={inputRef}
           type="text"
-          inputMode="numeric"
+          inputMode="decimal"
           value={localValue}
           placeholder="0"
           onChange={handleInputChange}
@@ -114,7 +113,7 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
   });
 
   const [menuItems, setMenuItems] = useState<Partial<MenuItem>[]>([
-    { name: 'Signature Item', price: 0, cost: 0, sold: 0 }
+    { name: '', price: 0, cost: 0, sold: 0 }
   ]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -176,21 +175,38 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
 
   const handleCommit = () => {
     if (validate()) {
+      // STRICT NORMALIZATION: Ensure all inputs are numbers
       const processedItems: MenuItem[] = menuItems.map((item, idx) => {
-        const contribution = ((item.price || 0) - (item.cost || 0)) * (item.sold || 0);
+        const p = Number(item.price) || 0;
+        const c = Number(item.cost) || 0;
+        const s = Number(item.sold) || 0;
         return {
           ...item,
           name: item.name || `Item ${idx + 1}`,
-          price: item.price || 0,
-          cost: item.cost || 0,
-          sold: item.sold || 0,
-          contribution,
+          price: p,
+          cost: c,
+          sold: s,
+          contribution: (p - c) * s,
           popularityRank: 0,
           profitRank: 0
         } as MenuItem;
       });
 
-      onSave({ ...formData, menuItems: processedItems, dataQualityScore: qualityScore });
+      onSave({
+        ...formData,
+        revenue: Number(formData.revenue),
+        online: Number(formData.online),
+        orders: Number(formData.orders),
+        foodCost: Number(formData.foodCost),
+        staff: Number(formData.staff),
+        rent: Number(formData.rent),
+        utilities: Number(formData.utilities),
+        marketing: Number(formData.marketing),
+        packaging: Number(formData.packaging),
+        discounts: Number(formData.discounts),
+        menuItems: processedItems,
+        dataQualityScore: qualityScore 
+      });
     }
   };
 
@@ -204,11 +220,11 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
             </div>
             <div>
               <h3 className="text-3xl font-black text-slate-900 tracking-tight">{initialData ? 'Refine Snapshot' : 'Data Integrity'}</h3>
-              <p className="text-sm font-medium text-slate-500">{initialData ? 'Update existing costs or prices to re-calculate.' : 'Higher scores lead to sharper AI profit insights.'}</p>
+              <p className="text-sm font-medium text-slate-500">Manual entry scores are normalized for high-precision ranking.</p>
             </div>
           </div>
           <div className="px-5 py-2.5 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-blue-100 flex items-center gap-2">
-            <Sparkles className="w-4 h-4" /> Logic v1.4.3
+            <Sparkles className="w-4 h-4" /> Pipeline v1.6.2
           </div>
         </div>
 
@@ -225,7 +241,7 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
               onChange={(v) => setFormData({...formData, revenue: v})} 
             />
             <FormattedInputField 
-              label="Zomato/Swiggy Sales" 
+              label="Online Sales Volume" 
               value={formData.online} 
               fieldName="online" 
               error={errors.online}
@@ -264,7 +280,7 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
                 label="Discounts & Offers" 
                 value={formData.discounts} 
                 fieldName="discounts" 
-                helper="Total value of platform discounts, coupons, and manual bill waivers."
+                helper="Total platform and manual discounts."
                 onChange={(v) => setFormData({...formData, discounts: v})} 
               />
             </div>
@@ -274,7 +290,7 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
         <div className="p-12 bg-slate-50 border-t border-slate-100 space-y-8">
           <div className="flex items-center justify-between">
             <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-              <Info className="w-4 h-4 text-blue-500" /> Menu Granularity (Profit/Loss Mapping)
+              <Info className="w-4 h-4 text-blue-500" /> Menu Granularity (Normalization Active)
             </h4>
             <button onClick={addMenuItem} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-black transition-all">
               <Plus className="w-3 h-3" /> Add Item

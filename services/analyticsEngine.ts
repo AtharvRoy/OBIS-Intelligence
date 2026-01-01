@@ -3,7 +3,7 @@ import { MonthlyRecord, BusinessSummary, RiskLevel, PerformanceMetadata, Perform
 
 export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?: MonthlyRecord): BusinessSummary {
   const { revenue, costs, menuItems = [] } = currentRecord;
-  const totalCosts = Object.values(costs).reduce((a, b) => a + b, 0);
+  const totalCosts = Object.values(costs).reduce((a, b) => a + Number(b), 0);
   const netProfit = revenue.total - totalCosts;
   const margin = (netProfit / revenue.total) * 100;
   
@@ -13,12 +13,20 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   const onlineDependencyPct = (revenue.online / revenue.total) * 100;
   const discountPct = (costs.discounts / revenue.total) * 100;
 
-  // --- MENU INTELLIGENCE CALCULATIONS ---
-  // Ensure we have ranks calculated for the UI
-  const sortedByPopularity = [...menuItems].sort((a, b) => b.sold - a.sold);
-  const sortedByProfit = [...menuItems].sort((a, b) => b.contribution - a.contribution);
+  // --- MENU INTELLIGENCE: DYNAMIC RANKING PIPELINE ---
+  // Ensure all values are numeric and contributions are fresh
+  const processedItems: MenuItem[] = menuItems.map(item => {
+    const price = Number(item.price) || 0;
+    const cost = Number(item.cost) || 0;
+    const sold = Number(item.sold) || 0;
+    const contribution = (price - cost) * sold;
+    return { ...item, price, cost, sold, contribution };
+  });
+
+  const sortedByPopularity = [...processedItems].sort((a, b) => b.sold - a.sold);
+  const sortedByProfit = [...processedItems].sort((a, b) => b.contribution - a.contribution);
   
-  const rankedMenuItems: MenuItem[] = menuItems.map(item => ({
+  const rankedMenuItems: MenuItem[] = processedItems.map(item => ({
     ...item,
     popularityRank: sortedByPopularity.findIndex(i => i.name === item.name) + 1,
     profitRank: sortedByProfit.findIndex(i => i.name === item.name) + 1
@@ -28,13 +36,10 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   let worstItem: MenuItem | undefined = [...rankedMenuItems].sort((a, b) => (a.cost/a.price) - (b.cost/b.price)).pop();
 
   // --- DUAL AXIS HEALTH ANALYSIS ---
-  
-  // 1. Financial Health (Margin Focused)
   let financialHealth: PerformanceBandLevel = 'Healthy';
   if (margin < 10) financialHealth = 'Dangerous';
   else if (margin < 18) financialHealth = 'Weak';
 
-  // 2. Structural Resilience (Dependencies & Operational Costs)
   let structuralResilience: PerformanceBandLevel = 'Healthy';
   if (onlineDependencyPct > 70 || foodCostPct > 36 || currentRecord.dataQualityScore < 70) {
     structuralResilience = 'Dangerous';
@@ -42,7 +47,6 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     structuralResilience = 'Weak';
   }
 
-  // Combined Performance Band (Legacy mapping for UI)
   let level: PerformanceBandLevel = financialHealth === 'Dangerous' || structuralResilience === 'Dangerous' ? 'Dangerous' : 
                                     (financialHealth === 'Weak' || structuralResilience === 'Weak' ? 'Weak' : 'Healthy');
 
@@ -65,7 +69,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   // Delta calculations
   let deltas;
   if (previousRecord) {
-    const prevTotalCosts = Object.values(previousRecord.costs).reduce((a, b) => a + b, 0);
+    const prevTotalCosts = Object.values(previousRecord.costs).reduce((a, b) => a + Number(b), 0);
     const prevNetProfit = previousRecord.revenue.total - prevTotalCosts;
     const prevMargin = (prevNetProfit / previousRecord.revenue.total) * 100;
     const prevFoodCostPct = (previousRecord.costs.food / previousRecord.revenue.total) * 100;
@@ -122,6 +126,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     attentionScore,
     bestItem,
     worstItem,
+    rankedMenuItems,
     deltas
   };
 }
