@@ -25,7 +25,8 @@ import {
   XCircle,
   HelpCircle,
   AlertCircle,
-  Edit3
+  Edit3,
+  RefreshCw
 } from 'lucide-react';
 import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
@@ -39,19 +40,22 @@ import { MOCK_CLIENTS, MOCK_RECORDS } from './constants';
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [clients, setClients] = useState<Client[]>(() => {
-    return MOCK_CLIENTS.map(c => ({ ...c, decisionLog: c.decisionLog || [] }));
+    return MOCK_CLIENTS.map(c => ({ 
+      ...c, 
+      decisionLog: c.decisionLog || [],
+      currentInsights: c.currentInsights || []
+    }));
   });
   const [records, setRecords] = useState<Record<string, MonthlyRecord[]>>(MOCK_RECORDS);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'input' | 'analysis' | 'insights' | 'export'>('analysis');
   const [meetingMode, setMeetingMode] = useState(false);
-  const [insights, setInsights] = useState<AiInsight[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [loggedDecisions, setLoggedDecisions] = useState<Set<string>>(new Set());
 
+  // Reset UI state when client changes, but keep persistent insights
   useEffect(() => {
-    setInsights([]);
     setLoggedDecisions(new Set());
     if (selectedClientId) setActiveTab('analysis');
   }, [selectedClientId]);
@@ -110,7 +114,6 @@ const App: React.FC = () => {
       c.id === selectedClientId ? { ...c, decisionLog: [newEntry, ...c.decisionLog] } : c
     ));
     
-    // Add to local set for UI checkmark
     setLoggedDecisions(prev => new Set(prev).add(insightId));
   };
 
@@ -143,7 +146,14 @@ const App: React.FC = () => {
       ...prev, 
       [selectedClientId]: [newRecord, ...(activeRecord ? (prev[selectedClientId]?.slice(1) || []) : (prev[selectedClientId] || []))] 
     }));
-    setClients(prev => prev.map(c => c.id === selectedClientId ? { ...c, lastUpdatedAt: new Date().toISOString() } : c));
+    
+    setClients(prev => prev.map(c => 
+      c.id === selectedClientId ? { 
+        ...c, 
+        lastUpdatedAt: new Date().toISOString(),
+        currentInsights: [] // Clear old insights when new data is pushed to force re-analysis
+      } : c
+    ));
     setActiveTab('analysis');
   };
 
@@ -151,11 +161,17 @@ const App: React.FC = () => {
     if (!summary || !activeRecord || !activeClient) return;
     setLoadingInsights(true);
     const results = await generateInsights(summary, activeRecord.topItems, activeClient.insightHistory);
-    setInsights(results);
+    
+    // Save generated insights to the client for persistence
+    setClients(prev => prev.map(c => 
+      c.id === selectedClientId ? { ...c, currentInsights: results } : c
+    ));
+    
     setLoadingInsights(false);
   };
 
   const handlePrint = () => {
+    // Standard window.print() is the most reliable way to generate a PDF in browsers
     window.print();
   };
 
@@ -316,16 +332,21 @@ const App: React.FC = () => {
                 <div className="relative z-10 max-w-2xl">
                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-black uppercase tracking-[0.2em] mb-6"><Sparkles className="w-3 h-3" /> OBIS Trust-Engine v1.6</div>
                   <h3 className="text-6xl font-black mb-6 leading-tight tracking-tighter">Strategic Drafting</h3>
-                  <p className="text-slate-400 mb-10 text-xl font-medium leading-relaxed">AI drafting requires human verification before archive. Confidence signaling is based on data quality.</p>
-                  <button onClick={handleFetchAiInsights} disabled={loadingInsights} className="px-12 py-5 bg-blue-600 hover:bg-blue-700 rounded-3xl font-black transition-all shadow-2xl disabled:opacity-50 active:scale-95 text-lg">
-                    {loadingInsights ? 'Analyzing Reliability...' : 'Generate Verified Insights'}
+                  <p className="text-slate-400 mb-10 text-xl font-medium leading-relaxed">AI drafting requires human verification before archive. Once generated, insights are stored in the client profile.</p>
+                  <button 
+                    onClick={handleFetchAiInsights} 
+                    disabled={loadingInsights} 
+                    className="px-12 py-5 bg-blue-600 hover:bg-blue-700 rounded-3xl font-black transition-all shadow-2xl disabled:opacity-50 active:scale-95 text-lg flex items-center gap-3"
+                  >
+                    {loadingInsights ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
+                    {loadingInsights ? 'Analyzing Reliability...' : activeClient?.currentInsights?.length ? 'Regenerate Insights' : 'Generate Verified Insights'}
                   </button>
                 </div>
               </div>
               
-              {insights.length > 0 && (
+              {activeClient?.currentInsights && activeClient.currentInsights.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                  {insights.map((insight, idx) => {
+                  {activeClient.currentInsights.map((insight, idx) => {
                     const insightId = `insight-${idx}`;
                     const hasBeenLogged = loggedDecisions.has(insightId);
 
@@ -381,7 +402,7 @@ const App: React.FC = () => {
               <div className="no-print flex flex-col items-center justify-center py-40 bg-white rounded-[4rem] border-4 border-dashed border-slate-100 text-center">
                 <div className="w-28 h-28 bg-blue-50 rounded-[2.5rem] flex items-center justify-center mb-10 shadow-2xl shadow-blue-100"><FileText className="w-12 h-12 text-blue-600" /></div>
                 <h3 className="text-5xl font-black text-slate-900 mb-6 tracking-tighter">Executive Intelligence Summary</h3>
-                <p className="text-slate-500 mb-14 max-w-sm font-medium text-xl leading-relaxed">PDF export includes the new Decision Log & Confidence Signaling for maximum transparency.</p>
+                <p className="text-slate-500 mb-14 max-w-sm font-medium text-xl leading-relaxed">PDF report includes performance bands, the decision history log, and menu drag analysis.</p>
                 <div className="flex gap-4">
                   <button onClick={handlePrint} className="px-16 py-6 bg-slate-900 text-white rounded-[2rem] font-black shadow-2xl hover:bg-black transition-all hover:scale-105 active:scale-95 text-xl flex items-center gap-3">
                     <Download className="w-6 h-6" /> Download PDF Report
@@ -394,7 +415,7 @@ const App: React.FC = () => {
 
         {/* UNIVERSAL PRINT CONTAINER (Strict CSS controlled) */}
         {summary && activeClient && activeRecord && (
-          <div className="print-only fixed inset-0 z-[-1] bg-white p-12 space-y-12 w-full min-h-screen">
+          <div className="print-only fixed inset-0 z-50 bg-white p-12 space-y-12 w-full min-h-screen">
             <div className="flex justify-between items-start">
               <div className="space-y-2">
                 <h1 className="text-4xl font-black tracking-tighter uppercase">{activeClient.name}</h1>
@@ -433,7 +454,7 @@ const App: React.FC = () => {
               <div className="space-y-6">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Decision History</h4>
                 <div className="space-y-4">
-                  {activeClient.decisionLog.slice(0, 4).map(entry => (
+                  {activeClient.decisionLog.slice(0, 5).map(entry => (
                     <div key={entry.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center">
                       <div className="max-w-[80%]">
                         <p className="text-[7px] font-black text-slate-400 mb-1 uppercase">{entry.targetMonth}</p>
@@ -449,7 +470,7 @@ const App: React.FC = () => {
 
             <footer className="absolute bottom-12 left-12 right-12 pt-10 flex justify-between items-center text-[8px] font-bold text-slate-400 uppercase tracking-widest border-t border-slate-100">
               <p>OBIS Advisory OS • Confidential Strategic Report</p>
-              <p>Decision Traceability ID: {activeClient.id}-{Date.now()}</p>
+              <p>Decision Traceability ID: {activeClient.id}-{activeRecord.month}</p>
             </footer>
           </div>
         )}
@@ -471,7 +492,8 @@ const App: React.FC = () => {
                  startMonth: new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
                  lastUpdatedAt: new Date().toISOString(),
                  insightHistory: [],
-                 decisionLog: []
+                 decisionLog: [],
+                 currentInsights: []
                };
                setClients(prev => [newClient, ...prev]);
                setShowNewClientForm(false);

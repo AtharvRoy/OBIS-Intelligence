@@ -42,7 +42,8 @@ export interface Client {
   startMonth: string;
   lastUpdatedAt: string;
   insightHistory: InsightHistoryItem[];
-  decisionLog: DecisionLogEntry[]; // Traceability
+  decisionLog: DecisionLogEntry[]; 
+  currentInsights?: AiInsight[]; // Persistent storage for generated insights
 }
 
 export interface MenuItem {
@@ -89,7 +90,7 @@ export interface BusinessSummary {
   staffCostPct: number;
   onlineDependencyPct: number;
   dataQuality: number;
-  attentionScore: number; // New Priority Metric
+  attentionScore: number; 
   bestItem?: MenuItem;
   worstItem?: MenuItem;
   deltas?: {
@@ -126,7 +127,7 @@ export interface AiInsight {
   importance: string;
   recommendation: string;
   impactPotential: string;
-  confidenceScore: number; // 0-100
+  confidenceScore: number; 
   confidenceReason: string;
   promptVersion: string;
 }
