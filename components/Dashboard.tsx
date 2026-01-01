@@ -7,7 +7,7 @@ import {
 import { StatCard } from './StatCard';
 import { 
   TrendingUp, CreditCard, PieChart as PieIcon, AlertCircle, 
-  IndianRupee, LayoutGrid, Activity, ShieldCheck, ArrowUpRight, ArrowDownRight, Zap
+  IndianRupee, LayoutGrid, Activity, ShieldCheck, ArrowUpRight, ArrowDownRight, Zap, Tag
 } from 'lucide-react';
 import { BusinessSummary, RevenueData, CostCategory } from '../types';
 import { BENCHMARKS } from '../constants';
@@ -37,6 +37,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, revenue, costs })
   // Benchmark Status Helpers
   const isNetMarginSafe = summary.margin >= BENCHMARKS.netMargin.healthy[0];
   const isFoodCostSafe = summary.foodCostPct <= BENCHMARKS.foodCostPct.healthy[1];
+  
+  // New: Calculate discount from the cost object if possible (it's lumped in costs prop)
+  const discountVal = costs.find(c => c.name === 'Discounts')?.value || 0;
+  const discountBurn = (discountVal / summary.revenue) * 100;
 
   return (
     <div className="space-y-12 animate-in fade-in duration-500">
@@ -69,19 +73,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, revenue, costs })
           }}
         />
         <StatCard 
-          label="Operating Costs" 
-          value={formatCurrency(summary.costs)} 
-          subValue={`${((summary.costs / summary.revenue) * 100).toFixed(1)}% of Revenue`}
-          color={isFoodCostSafe ? "blue" : "orange"}
-          icon={<CreditCard className="w-5 h-5" />}
-          trend={summary.deltas ? {
-            value: summary.deltas.foodCost, 
-            isGood: summary.deltas.foodCost <= 0,
-            type: 'points'
-          } : undefined}
+          label="Discount Burn" 
+          value={`${discountBurn.toFixed(1)}%`} 
+          subValue={`₹${(discountVal/1000).toFixed(1)}k given away`}
+          color={discountBurn > 8 ? "red" : "blue"}
+          icon={<Tag className="w-5 h-5" />}
           benchmarkStatus={{
-            isSafe: isFoodCostSafe,
-            label: isFoodCostSafe ? "Within COGS Range" : "High Food Cost"
+            isSafe: discountBurn < 8,
+            label: discountBurn < 8 ? "Controlled Promo" : "High Leakage"
           }}
         />
         <StatCard 

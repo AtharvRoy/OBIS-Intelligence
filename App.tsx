@@ -39,20 +39,51 @@ import { MOCK_CLIENTS, MOCK_RECORDS } from './constants';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  
+  // Persistent State Initialization
   const [clients, setClients] = useState<Client[]>(() => {
+    const saved = localStorage.getItem('OBIS_CLIENTS');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse saved clients", e);
+      }
+    }
     return MOCK_CLIENTS.map(c => ({ 
       ...c, 
       decisionLog: c.decisionLog || [],
       currentInsights: c.currentInsights || []
     }));
   });
-  const [records, setRecords] = useState<Record<string, MonthlyRecord[]>>(MOCK_RECORDS);
+
+  const [records, setRecords] = useState<Record<string, MonthlyRecord[]>>(() => {
+    const saved = localStorage.getItem('OBIS_RECORDS');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse saved records", e);
+      }
+    }
+    return MOCK_RECORDS;
+  });
+
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'input' | 'analysis' | 'insights' | 'export'>('analysis');
   const [meetingMode, setMeetingMode] = useState(false);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [loggedDecisions, setLoggedDecisions] = useState<Set<string>>(new Set());
+
+  // Persistence Effects: Save whenever state changes
+  useEffect(() => {
+    localStorage.setItem('OBIS_CLIENTS', JSON.stringify(clients));
+  }, [clients]);
+
+  useEffect(() => {
+    localStorage.setItem('OBIS_RECORDS', JSON.stringify(records));
+  }, [records]);
 
   // Reset UI state when client changes, but keep persistent insights
   useEffect(() => {
@@ -94,7 +125,8 @@ const App: React.FC = () => {
       { name: 'Rent', value: activeRecord.costs.rent },
       { name: 'Marketing', value: activeRecord.costs.marketing },
       { name: 'Packaging', value: activeRecord.costs.packaging },
-      { name: 'Utilities', value: activeRecord.costs.utilities }
+      { name: 'Utilities', value: activeRecord.costs.utilities },
+      { name: 'Discounts', value: activeRecord.costs.discounts }
     ];
     return { revenue, costs };
   }, [activeRecord]);
@@ -171,7 +203,6 @@ const App: React.FC = () => {
   };
 
   const handlePrint = () => {
-    // Standard window.print() is the most reliable way to generate a PDF in browsers
     window.print();
   };
 
@@ -413,7 +444,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* UNIVERSAL PRINT CONTAINER (Strict CSS controlled) */}
+        {/* UNIVERSAL PRINT CONTAINER */}
         {summary && activeClient && activeRecord && (
           <div className="print-only fixed inset-0 z-50 bg-white p-12 space-y-12 w-full min-h-screen">
             <div className="flex justify-between items-start">
@@ -463,7 +494,6 @@ const App: React.FC = () => {
                       <span className="text-[8px] font-black uppercase text-slate-900">{entry.status}</span>
                     </div>
                   ))}
-                  {activeClient.decisionLog.length === 0 && <p className="text-[10px] italic text-slate-400">No decisions logged in current period.</p>}
                 </div>
               </div>
             </div>

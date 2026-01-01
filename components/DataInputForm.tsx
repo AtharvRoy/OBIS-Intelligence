@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, ShieldAlert, Sparkles, Info, HelpCircle, Plus, Trash2, UtensilsCrossed } from 'lucide-react';
+import { Save, ShieldAlert, Sparkles, Info, HelpCircle, Plus, Trash2, UtensilsCrossed, Tag } from 'lucide-react';
 import { MenuItem, MonthlyRecord } from '../types';
 
 interface DataInputFormProps {
@@ -33,14 +33,12 @@ interface FormattedInputProps {
   error?: string;
 }
 
-// DEFINED OUTSIDE TO PREVENT RE-MOUNTING AND FOCUS LOSS
 const FormattedInputField: React.FC<FormattedInputProps> = ({ 
   label, value, onChange, prefix = "₹", helper, error 
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localValue, setLocalValue] = useState(formatIndianNumber(value));
 
-  // Sync local value when external value changes (e.g. on initial load)
   useEffect(() => {
     const formatted = formatIndianNumber(value);
     if (formatted !== localValue) {
@@ -53,7 +51,6 @@ const FormattedInputField: React.FC<FormattedInputProps> = ({
     const rawValue = input.value.replace(/[^0-9]/g, '');
     const numValue = rawValue === '' ? 0 : parseInt(rawValue, 10);
     
-    // Store cursor position to prevent jumping
     const cursor = input.selectionStart || 0;
     const oldLength = input.value.length;
     
@@ -61,7 +58,6 @@ const FormattedInputField: React.FC<FormattedInputProps> = ({
     setLocalValue(formatted);
     onChange(numValue);
 
-    // Restore cursor position after formatting (if characters added/removed)
     setTimeout(() => {
       if (inputRef.current) {
         const newLength = formatted.length;
@@ -124,7 +120,6 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [qualityScore, setQualityScore] = useState(100);
 
-  // Pre-fill data if editing
   useEffect(() => {
     if (initialData) {
       setFormData({
@@ -263,7 +258,16 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
               <FormattedInputField label="Utilities" value={formData.utilities} fieldName="utilities" onChange={(v) => setFormData({...formData, utilities: v})} />
               <FormattedInputField label="Marketing" value={formData.marketing} fieldName="marketing" onChange={(v) => setFormData({...formData, marketing: v})} />
             </div>
-            <FormattedInputField label="Packaging & Disposables" value={formData.packaging} fieldName="packaging" onChange={(v) => setFormData({...formData, packaging: v})} />
+            <div className="grid grid-cols-2 gap-6">
+              <FormattedInputField label="Packaging" value={formData.packaging} fieldName="packaging" onChange={(v) => setFormData({...formData, packaging: v})} />
+              <FormattedInputField 
+                label="Discounts & Offers" 
+                value={formData.discounts} 
+                fieldName="discounts" 
+                helper="Total value of platform discounts, coupons, and manual bill waivers."
+                onChange={(v) => setFormData({...formData, discounts: v})} 
+              />
+            </div>
           </div>
         </div>
 

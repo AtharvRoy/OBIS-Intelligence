@@ -11,6 +11,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   const staffCostPct = (costs.staff / revenue.total) * 100;
   const marketingPct = (costs.marketing / revenue.total) * 100;
   const onlineDependencyPct = (revenue.online / revenue.total) * 100;
+  const discountPct = (costs.discounts / revenue.total) * 100;
 
   // Granular Menu Analysis
   let bestItem: MenuItem | undefined;
@@ -30,16 +31,19 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   let driver = 'Balanced revenue/cost mix.';
   let riskLevel: RiskLevel = 'Low';
 
+  // DISCOUNT LEAKAGE DETECTION
+  const isHighDiscount = discountPct > 10;
+
   if (margin < 8 || foodCostPct > 36) {
     level = 'Dangerous';
     riskLevel = 'High';
     reason = margin < 8 ? 'Net margin is in the critical danger zone.' : 'Food cost is cannibalizing all profits.';
-    driver = foodCostPct > 36 ? 'Procurement & Waste' : 'High Fixed Overheads';
-  } else if (margin < 15 || foodCostPct > 33 || onlineDependencyPct > 60) {
+    driver = isHighDiscount ? 'Discount Burn' : (foodCostPct > 36 ? 'Procurement & Waste' : 'High Fixed Overheads');
+  } else if (margin < 15 || foodCostPct > 33 || onlineDependencyPct > 60 || isHighDiscount) {
     level = 'Weak';
     riskLevel = 'Medium';
-    reason = margin < 15 ? 'Profitability is trailing the target.' : 'External dependency is high.';
-    driver = onlineDependencyPct > 60 ? 'Platform Commissions' : 'Menu Costing';
+    reason = isHighDiscount ? `Discount burn (${discountPct.toFixed(1)}%) is eroding your base margin.` : (margin < 15 ? 'Profitability is trailing the target.' : 'External dependency is high.');
+    driver = isHighDiscount ? 'Revenue Leakage' : (onlineDependencyPct > 60 ? 'Platform Commissions' : 'Menu Costing');
   }
 
   // Delta calculations
@@ -64,25 +68,27 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   }
 
   // ATTENTION SCORE (Priority Metric)
-  // Weighted calculation based on risk, data quality, and margin health
   const attentionScore = Math.min(100, 
     (100 - currentRecord.dataQualityScore) * 0.4 + 
     (riskLevel === 'High' ? 40 : riskLevel === 'Medium' ? 15 : 0) + 
+    (isHighDiscount ? 15 : 0) +
     (Math.abs(deltas?.margin || 0) > 3 ? 20 : 0)
   );
 
   const narrative = {
     health: `The business is currently operating at a ${level} level. Net margin is ${margin.toFixed(1)}%.`,
-    change: bestItem 
-      ? `${bestItem.name} is your top anchor (₹${bestItem.contribution.toLocaleString()} profit contribution), while ${worstItem?.name} is your highest cost-drag item.`
-      : deltas 
-        ? `Revenue is ${deltas.revenue > 0 ? 'up' : 'down'} by ${Math.abs(deltas.revenue).toFixed(0)}%, but online dependency shifted by ${deltas.onlineDependency.toFixed(1)}pp.`
-        : 'Initial pilot baseline created.',
-    action: worstItem && (worstItem.cost/worstItem.price) > 0.45
-      ? `Audit the preparation cost of ${worstItem.name} immediately; it is currently cannibalizing your margin.`
-      : level === 'Healthy' 
-        ? 'Increase marketing spend on high-margin items to scale profit.' 
-        : `Address ${driver} issues to restore health.`
+    change: isHighDiscount 
+      ? `Promotional spending is high at ${discountPct.toFixed(1)}% of revenue. Every ₹100 earned is losing ₹${discountPct.toFixed(0)} to discounts.`
+      : (bestItem 
+        ? `${bestItem.name} is your top anchor (₹${bestItem.contribution.toLocaleString()} profit contribution), while ${worstItem?.name} is your highest cost-drag item.`
+        : 'Initial pilot baseline created.'),
+    action: isHighDiscount 
+      ? 'Audit platform-wide "Auto-Apply" coupons. Target a discount ceiling of 7% to recover margin.'
+      : (worstItem && (worstItem.cost/worstItem.price) > 0.45
+        ? `Audit the preparation cost of ${worstItem.name} immediately; it is currently cannibalizing your margin.`
+        : level === 'Healthy' 
+          ? 'Increase marketing spend on high-margin items to scale profit.' 
+          : `Address ${driver} issues to restore health.`)
   };
 
   const performanceBand: PerformanceMetadata = { level, reason, driver, narrative };
