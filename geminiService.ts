@@ -2,7 +2,17 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { BusinessSummary, AiInsight, InsightHistoryItem } from './types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize lazily to prevent hard crashes if API_KEY is missing during boot
+let aiInstance: GoogleGenAI | null = null;
+
+const getAI = () => {
+  if (!aiInstance) {
+    const apiKey = process.env.API_KEY || "";
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+};
+
 const PROMPT_VERSION = "v1.6.0-trust-aware";
 
 export const generateInsights = async (
@@ -10,6 +20,7 @@ export const generateInsights = async (
   topItems: string[],
   history: InsightHistoryItem[] = []
 ): Promise<AiInsight[]> => {
+  const ai = getAI();
   const metrics = {
     netMargin: `${summary.margin.toFixed(1)}%`,
     foodCost: `${summary.foodCostPct.toFixed(1)}%`,

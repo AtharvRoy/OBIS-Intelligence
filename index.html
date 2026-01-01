@@ -10,9 +10,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; -webkit-print-color-adjust: exact; }
+        body { font-family: 'Inter', sans-serif; -webkit-print-color-adjust: exact; margin: 0; padding: 0; background-color: #0f172a; }
         
-        /* Hide number input spinners for easier manual typing of large numbers */
+        /* Hide number input spinners */
         input::-webkit-outer-spin-button,
         input::-webkit-inner-spin-button {
             -webkit-appearance: none;
@@ -21,6 +21,65 @@
         input[type=number] {
             -moz-appearance: textfield;
         }
+
+        /* Splash Screen & Error State */
+        #splash {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            background-color: #0f172a;
+            color: white;
+            transition: opacity 0.5s ease-out, visibility 0.5s;
+        }
+
+        .loader-box {
+            width: 80px;
+            height: 80px;
+            background: #2563eb;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 2.5rem;
+            font-style: italic;
+            box-shadow: 0 0 50px rgba(37, 99, 235, 0.3);
+            animation: pulse 2s infinite ease-in-out;
+            margin-bottom: 2rem;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 20px rgba(37, 99, 235, 0.3); }
+            50% { transform: scale(1.05); box-shadow: 0 0 50px rgba(37, 99, 235, 0.5); }
+            100% { transform: scale(1); box-shadow: 0 0 20px rgba(37, 99, 235, 0.3); }
+        }
+
+        .loading-text {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            font-weight: 900;
+            color: #64748b;
+        }
+
+        #error-guide {
+            display: none;
+            max-width: 400px;
+            text-align: center;
+            margin-top: 2rem;
+            padding: 2rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #error-guide h2 { color: #ef4444; font-weight: 900; margin-bottom: 0.5rem; }
+        #error-guide p { font-size: 0.875rem; color: #94a3b8; line-height: 1.6; }
+        #error-guide code { background: black; padding: 2px 6px; border-radius: 4px; color: #3b82f6; }
 
         @media print {
             .no-print { display: none !important; }
@@ -32,7 +91,7 @@
                 height: auto !important;
                 overflow: visible !important;
             }
-            body { background: white !important; margin: 0; padding: 0; }
+            body { background: white !important; }
             #root { height: auto !important; }
             @page {
                 margin: 1.5cm;
@@ -56,6 +115,52 @@
 </script>
 </head>
 <body class="bg-slate-50 text-slate-900">
+    <div id="splash">
+        <div class="loader-box">O</div>
+        <div id="status-text" class="loading-text">Connecting to Intelligence Engine...</div>
+        
+        <div id="error-guide">
+            <h2>Link Offline</h2>
+            <p>The desktop app cannot find your local server at <code>localhost</code>.</p>
+            <p class="mt-4">1. Ensure your terminal is running <code>npm run dev</code>.</p>
+            <p>2. Check if the port in your terminal matches the port you gave Nativefier.</p>
+            <button onclick="window.location.reload()" class="mt-6 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest">Retry Connection</button>
+        </div>
+    </div>
     <div id="root"></div>
+    <script>
+        // Watchdog to handle "White Screen" or Port Mismatch
+        const checkConnection = async () => {
+            try {
+                // If we are in the browser/electron, check if we can actually reach the server
+                const response = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' });
+                if (response.ok) {
+                    // Success! Let React take over.
+                    setTimeout(() => {
+                        const splash = document.getElementById('splash');
+                        if (splash) {
+                            splash.style.opacity = '0';
+                            setTimeout(() => splash.style.visibility = 'hidden', 500);
+                        }
+                    }, 1000);
+                }
+            } catch (e) {
+                // Fail! Show the error guide
+                document.getElementById('status-text').style.display = 'none';
+                document.getElementById('error-guide').style.display = 'block';
+            }
+        };
+
+        window.addEventListener('load', checkConnection);
+        
+        // Safety timeout: If nothing happens for 10 seconds, show error anyway
+        setTimeout(() => {
+            const splash = document.getElementById('splash');
+            if (splash && splash.style.visibility !== 'hidden') {
+                document.getElementById('status-text').style.display = 'none';
+                document.getElementById('error-guide').style.display = 'block';
+            }
+        }, 10000);
+    </script>
 </body>
 </html>

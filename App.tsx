@@ -29,7 +29,14 @@ import {
   RefreshCw,
   Trash2,
   Upload,
-  Save
+  Save,
+  Monitor,
+  Terminal,
+  Copy,
+  AlertTriangle,
+  Cpu,
+  Layers,
+  Chrome
 } from 'lucide-react';
 import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
@@ -43,13 +50,15 @@ import { MOCK_CLIENTS, MOCK_RECORDS } from './constants';
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [copyStates, setCopyStates] = useState<Record<string, boolean>>({});
   
   // Persistent State Initialization
   const [clients, setClients] = useState<Client[]>(() => {
     const saved = localStorage.getItem('OBIS_CLIENTS');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return parsed.length > 0 ? parsed : MOCK_CLIENTS;
       } catch (e) {
         console.error("Failed to parse saved clients", e);
       }
@@ -65,7 +74,8 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('OBIS_RECORDS');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return Object.keys(parsed).length > 0 ? parsed : MOCK_RECORDS;
       } catch (e) {
         console.error("Failed to parse saved records", e);
       }
@@ -113,7 +123,7 @@ const App: React.FC = () => {
       const eng = current ? runAnalyticsEngine(current, previous) : null;
       const isStale = (Date.now() - new Date(client.lastUpdatedAt).getTime()) > 1000 * 60 * 60 * 24 * 7;
       const score = eng ? eng.attentionScore + (isStale ? 20 : 0) : 100;
-      return { client, score, status: eng?.performanceBand.level || 'Unknown', risk: eng?.riskLevel || 'Low' };
+      return { client, score, status: eng?.performanceBand.level || 'Healthy', risk: eng?.riskLevel || 'Low' };
     }).sort((a, b) => b.score - a.score);
   }, [clients, records]);
 
@@ -134,6 +144,19 @@ const App: React.FC = () => {
     ];
     return { revenue, costs };
   }, [activeRecord]);
+
+  // SYSTEM RECOVERY
+  const handleReload = () => {
+    if (window.confirm("Reload System? This will refresh the connection to the core engine.")) {
+      window.location.reload();
+    }
+  };
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopyStates(prev => ({ ...prev, [id]: true }));
+    setTimeout(() => setCopyStates(prev => ({ ...prev, [id]: false })), 2000);
+  };
 
   // DATA SYNC HANDLERS
   const handleExportData = () => {
@@ -162,16 +185,13 @@ const App: React.FC = () => {
       try {
         const data = JSON.parse(event.target?.result as string);
         if (data.clients && data.records) {
-          if (window.confirm("This will replace your current app data with the backup file. Proceed?")) {
+          if (window.confirm("Replace current app data with backup?")) {
             setClients(data.clients);
             setRecords(data.records);
-            alert("Data successfully restored!");
           }
-        } else {
-          alert("Invalid backup file format.");
         }
       } catch (err) {
-        alert("Failed to parse the backup file.");
+        alert("Failed to parse file.");
       }
     };
     reader.readAsText(file);
@@ -179,7 +199,7 @@ const App: React.FC = () => {
 
   const handleDeleteClient = (e: React.MouseEvent, clientId: string) => {
     e.stopPropagation();
-    if (window.confirm('Permanently delete this restaurant and all its data? This cannot be undone.')) {
+    if (window.confirm('Delete this restaurant permanently?')) {
       setClients(prev => prev.filter(c => c.id !== clientId));
       setRecords(prev => {
         const newRecords = { ...prev };
@@ -314,6 +334,13 @@ const App: React.FC = () => {
                   className="hidden" 
                   accept=".json"
                 />
+                <button 
+                  onClick={handleReload}
+                  className="p-3 text-slate-400 hover:text-blue-500 transition-colors rounded-xl hover:bg-slate-50"
+                  title="Refresh App"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </button>
               </div>
               <button onClick={() => setShowNewClientForm(true)} className="flex items-center gap-3 bg-slate-900 text-white px-10 py-5 rounded-[1.5rem] font-black shadow-2xl hover:bg-black transition-all hover:scale-105 active:scale-95"><Plus className="w-5 h-5" /> Add New Client</button>
             </div>
@@ -384,14 +411,20 @@ const App: React.FC = () => {
             </button>
           ))}
         </nav>
-        <div className="mt-auto bg-slate-800/50 p-6 rounded-[2rem] border border-white/5">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Meeting Mode</span>
-            <button onClick={() => setMeetingMode(!meetingMode)}>
-              {meetingMode ? <ToggleOn className="w-8 h-8 text-blue-400" /> : <Toggle className="w-8 h-8 text-slate-600" />}
-            </button>
+        <div className="mt-auto bg-slate-800/50 p-6 rounded-[2rem] border border-white/5 space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Meeting Mode</span>
+              <button onClick={() => setMeetingMode(!meetingMode)}>
+                {meetingMode ? <ToggleOn className="w-8 h-8 text-blue-400" /> : <Toggle className="w-8 h-8 text-slate-600" />}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Desktop Helper</span>
+              <button onClick={handleReload} className="p-2 text-slate-500 hover:text-white transition-colors"><RefreshCw className="w-4 h-4" /></button>
+            </div>
           </div>
-          <p className="text-[10px] text-slate-500 leading-relaxed font-medium">Hides risk flags for client view.</p>
+          <p className="text-[10px] text-slate-500 leading-relaxed font-medium">System v1.6.2 Alpha</p>
         </div>
       </aside>
 
@@ -417,9 +450,12 @@ const App: React.FC = () => {
               <AnalystConsole summary={summary} meetingMode={meetingMode} />
               
               <div className="bg-white p-12 rounded-[4rem] border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-3 mb-10">
-                  <History className="w-6 h-6 text-blue-600" />
-                  <h3 className="text-2xl font-black tracking-tight">Recent Decision Log</h3>
+                <div className="flex items-center justify-between mb-10">
+                  <div className="flex items-center gap-3">
+                    <History className="w-6 h-6 text-blue-600" />
+                    <h3 className="text-2xl font-black tracking-tight">Recent Decision Log</h3>
+                  </div>
+                  <button onClick={handleReload} className="text-[10px] font-black uppercase text-slate-300 hover:text-slate-600 flex items-center gap-2"><RefreshCw className="w-3 h-3" /> Sync Stream</button>
                 </div>
                 {activeClient?.decisionLog && activeClient.decisionLog.length > 0 ? (
                   <div className="space-y-6">
@@ -524,15 +560,98 @@ const App: React.FC = () => {
           )}
           
           {activeTab === 'export' && (
-            <div className="space-y-16 animate-in fade-in duration-700">
-              <div className="no-print flex flex-col items-center justify-center py-40 bg-white rounded-[4rem] border-4 border-dashed border-slate-100 text-center">
-                <div className="w-28 h-28 bg-blue-50 rounded-[2.5rem] flex items-center justify-center mb-10 shadow-2xl shadow-blue-100"><FileText className="w-12 h-12 text-blue-600" /></div>
-                <h3 className="text-5xl font-black text-slate-900 mb-6 tracking-tighter">Executive Intelligence Summary</h3>
-                <p className="text-slate-500 mb-14 max-w-sm font-medium text-xl leading-relaxed">PDF report includes performance bands, the decision history log, and menu drag analysis.</p>
-                <div className="flex gap-4">
-                  <button onClick={handlePrint} className="px-16 py-6 bg-slate-900 text-white rounded-[2rem] font-black shadow-2xl hover:bg-black transition-all hover:scale-105 active:scale-95 text-xl flex items-center gap-3">
-                    <Download className="w-6 h-6" /> Download PDF Report
-                  </button>
+            <div className="space-y-16 animate-in fade-in duration-700 pb-20">
+              <div className="no-print flex flex-col items-center justify-center py-32 bg-white rounded-[4rem] border border-slate-200 text-center shadow-sm">
+                <div className="w-24 h-24 bg-blue-50 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-2xl shadow-blue-100"><FileText className="w-10 h-10 text-blue-600" /></div>
+                <h3 className="text-4xl font-black text-slate-900 mb-4 tracking-tighter">Executive Intelligence Report</h3>
+                <p className="text-slate-500 mb-10 max-w-sm font-medium leading-relaxed">High-fidelity PDF for client meetings. Includes health bands and decision logs.</p>
+                <button onClick={handlePrint} className="px-12 py-5 bg-slate-900 text-white rounded-2xl font-black shadow-2xl hover:bg-black transition-all flex items-center gap-3">
+                  <Download className="w-5 h-5" /> Download Report PDF
+                </button>
+              </div>
+
+              {/* PROFESSIONAL DESKTOP SUITE */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                {/* OPTION 1: PWA (BROWSER NATIVE) */}
+                <div className="bg-white p-12 rounded-[3.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all relative overflow-hidden group">
+                  <div className="absolute -right-4 -top-4 w-32 h-32 bg-emerald-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-4 mb-10">
+                      <div className="w-14 h-14 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg"><Chrome className="w-8 h-8 text-white" /></div>
+                      <div>
+                        <h4 className="text-2xl font-black tracking-tight text-slate-900">Chrome PWA App</h4>
+                        <p className="text-emerald-600 font-black text-[9px] uppercase tracking-widest">Recommended: 100% Stable</p>
+                      </div>
+                    </div>
+                    <p className="text-slate-500 font-medium text-sm leading-relaxed mb-10">Transform this tab into a windowed app without any coding or build errors.</p>
+                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4 mb-10">
+                      <p className="text-[10px] font-black uppercase text-slate-400">Instructions</p>
+                      <ul className="text-xs font-bold text-slate-700 space-y-2 list-decimal pl-4">
+                        <li>Open this URL in Google Chrome.</li>
+                        <li>Click the <b>Three Dots (⋮)</b> in top right.</li>
+                        <li>Select <b>Save and Share</b> → <b>Install Page as App</b>.</li>
+                        <li>Tick "Start with Windows" for auto-boot.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* OPTION 2: ELECTRON (PROFESSIONAL EXE) */}
+                <div className="bg-slate-900 p-12 rounded-[3.5rem] shadow-2xl border border-white/5 relative overflow-hidden group">
+                  <div className="absolute -right-4 -top-4 w-32 h-32 bg-blue-500/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-4 mb-10">
+                      <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg"><Cpu className="w-8 h-8 text-white" /></div>
+                      <div>
+                        <h4 className="text-2xl font-black tracking-tight text-white">Professional EXE</h4>
+                        <p className="text-blue-400 font-black text-[9px] uppercase tracking-widest">Power User: Native Setup</p>
+                      </div>
+                    </div>
+                    <p className="text-slate-400 font-medium text-sm leading-relaxed mb-10">Build a custom .exe using the industry-standard Electron framework.</p>
+                    
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <p className="text-[9px] font-black uppercase text-blue-500 tracking-widest">Terminal Build Script</p>
+                        <div className="relative">
+                          <code className="block w-full bg-black/50 border border-white/10 p-4 rounded-xl font-mono text-[10px] text-blue-300 break-all leading-relaxed pr-12">
+                            npm install -D electron electron-builder && npx electron-builder build
+                          </code>
+                          <button 
+                            onClick={() => copyToClipboard('npm install -D electron electron-builder && npx electron-builder build', 'electron-cmd')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                          >
+                            {copyStates['electron-cmd'] ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium leading-relaxed italic">Requires the provided main.js file to be in your project root.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* DATA MANAGEMENT */}
+              <div className="bg-slate-100/50 p-12 rounded-[3.5rem] border border-slate-200">
+                <div className="flex items-center gap-4 mb-10">
+                  <Layers className="w-8 h-8 text-slate-500" />
+                  <h4 className="text-2xl font-black tracking-tight text-slate-900">Cold Storage Management</h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="p-8 bg-white rounded-3xl shadow-sm border border-slate-200 space-y-4">
+                    <h5 className="font-black text-[10px] uppercase text-slate-400">Full Archive</h5>
+                    <p className="text-xs text-slate-600 font-medium">Export every client, every record, and every AI insight into a single JSON file.</p>
+                    <button onClick={handleExportData} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all">Download Bundle</button>
+                  </div>
+                  <div className="p-8 bg-white rounded-3xl shadow-sm border border-slate-200 space-y-4">
+                    <h5 className="font-black text-[10px] uppercase text-slate-400">Restore Session</h5>
+                    <p className="text-xs text-slate-600 font-medium">Inject a previously exported OBIS bundle to restore all analytical states.</p>
+                    <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 bg-white border border-slate-200 text-slate-900 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm active:scale-95 transition-all">Upload Bundle</button>
+                  </div>
+                  <div className="p-8 bg-rose-50 rounded-3xl border border-rose-100 space-y-4">
+                    <h5 className="font-black text-[10px] uppercase text-rose-500">System Reset</h5>
+                    <p className="text-xs text-rose-600 font-medium">Wipe all local persistent data. Warning: This cannot be undone.</p>
+                    <button onClick={() => { if(window.confirm('Wipe everything?')) localStorage.clear(); window.location.reload(); }} className="w-full py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-rose-200 active:scale-95 transition-all">Factory Reset</button>
+                  </div>
                 </div>
               </div>
             </div>
