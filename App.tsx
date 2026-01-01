@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   FileInput, 
   BarChart3, 
@@ -26,7 +26,10 @@ import {
   HelpCircle,
   AlertCircle,
   Edit3,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  Upload,
+  Save
 } from 'lucide-react';
 import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
@@ -39,6 +42,7 @@ import { MOCK_CLIENTS, MOCK_RECORDS } from './constants';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Persistent State Initialization
   const [clients, setClients] = useState<Client[]>(() => {
@@ -76,7 +80,7 @@ const App: React.FC = () => {
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [loggedDecisions, setLoggedDecisions] = useState<Set<string>>(new Set());
 
-  // Persistence Effects: Save whenever state changes
+  // Persistence Effects
   useEffect(() => {
     localStorage.setItem('OBIS_CLIENTS', JSON.stringify(clients));
   }, [clients]);
@@ -85,7 +89,7 @@ const App: React.FC = () => {
     localStorage.setItem('OBIS_RECORDS', JSON.stringify(records));
   }, [records]);
 
-  // Reset UI state when client changes, but keep persistent insights
+  // Reset UI state when client changes
   useEffect(() => {
     setLoggedDecisions(new Set());
     if (selectedClientId) setActiveTab('analysis');
@@ -130,6 +134,61 @@ const App: React.FC = () => {
     ];
     return { revenue, costs };
   }, [activeRecord]);
+
+  // DATA SYNC HANDLERS
+  const handleExportData = () => {
+    const bundle = {
+      clients,
+      records,
+      exportDate: new Date().toISOString(),
+      version: '1.0'
+    };
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `OBIS_Backup_${new Date().toLocaleDateString().replace(/\//g, '-')}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.clients && data.records) {
+          if (window.confirm("This will replace your current app data with the backup file. Proceed?")) {
+            setClients(data.clients);
+            setRecords(data.records);
+            alert("Data successfully restored!");
+          }
+        } else {
+          alert("Invalid backup file format.");
+        }
+      } catch (err) {
+        alert("Failed to parse the backup file.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDeleteClient = (e: React.MouseEvent, clientId: string) => {
+    e.stopPropagation();
+    if (window.confirm('Permanently delete this restaurant and all its data? This cannot be undone.')) {
+      setClients(prev => prev.filter(c => c.id !== clientId));
+      setRecords(prev => {
+        const newRecords = { ...prev };
+        delete newRecords[clientId];
+        return newRecords;
+      });
+      if (selectedClientId === clientId) setSelectedClientId(null);
+    }
+  };
 
   const handleLogDecision = (rec: string, status: DecisionStatus, insightId: string) => {
     if (!selectedClientId || !activeRecord) return;
@@ -183,7 +242,7 @@ const App: React.FC = () => {
       c.id === selectedClientId ? { 
         ...c, 
         lastUpdatedAt: new Date().toISOString(),
-        currentInsights: [] // Clear old insights when new data is pushed to force re-analysis
+        currentInsights: []
       } : c
     ));
     setActiveTab('analysis');
@@ -193,12 +252,9 @@ const App: React.FC = () => {
     if (!summary || !activeRecord || !activeClient) return;
     setLoadingInsights(true);
     const results = await generateInsights(summary, activeRecord.topItems, activeClient.insightHistory);
-    
-    // Save generated insights to the client for persistence
     setClients(prev => prev.map(c => 
       c.id === selectedClientId ? { ...c, currentInsights: results } : c
     ));
-    
     setLoadingInsights(false);
   };
 
@@ -234,15 +290,54 @@ const App: React.FC = () => {
               </div>
               <p className="text-slate-500 font-medium ml-1 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-blue-500" /> Analyst Attention Monitor</p>
             </div>
-            <button onClick={() => setShowNewClientForm(true)} className="flex items-center gap-3 bg-slate-900 text-white px-10 py-5 rounded-[1.5rem] font-black shadow-2xl hover:bg-black transition-all hover:scale-105 active:scale-95"><Plus className="w-5 h-5" /> Add New Client</button>
+            
+            <div className="flex items-center gap-4">
+              <div className="flex bg-white rounded-2xl border border-slate-200 p-1.5 shadow-sm">
+                <button 
+                  onClick={handleExportData}
+                  className="p-3 text-slate-400 hover:text-blue-600 transition-colors rounded-xl hover:bg-slate-50"
+                  title="Backup Data (Export)"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-3 text-slate-400 hover:text-emerald-600 transition-colors rounded-xl hover:bg-slate-50"
+                  title="Restore Data (Import)"
+                >
+                  <Upload className="w-5 h-5" />
+                </button>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleImportData} 
+                  className="hidden" 
+                  accept=".json"
+                />
+              </div>
+              <button onClick={() => setShowNewClientForm(true)} className="flex items-center gap-3 bg-slate-900 text-white px-10 py-5 rounded-[1.5rem] font-black shadow-2xl hover:bg-black transition-all hover:scale-105 active:scale-95"><Plus className="w-5 h-5" /> Add New Client</button>
+            </div>
           </header>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
             {portfolioStats.map(({ client, score, status, risk }) => (
-              <button key={client.id} onClick={() => setSelectedClientId(client.id)} className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all text-left group overflow-hidden relative">
+              <button 
+                key={client.id} 
+                onClick={() => setSelectedClientId(client.id)} 
+                className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all text-left group overflow-hidden relative"
+              >
                 <div className="flex justify-between items-start mb-10">
                   <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${status === 'Healthy' ? 'bg-emerald-100 text-emerald-700' : status === 'Weak' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{status}</div>
-                  <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${score > 60 ? 'bg-rose-600 text-white shadow-lg animate-pulse' : 'bg-slate-100 text-slate-500'}`}>Priority: {score.toFixed(0)}</div>
+                  <div className="flex items-center gap-2">
+                    <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${score > 60 ? 'bg-rose-600 text-white shadow-lg animate-pulse' : 'bg-slate-100 text-slate-500'}`}>Priority: {score.toFixed(0)}</div>
+                    <div 
+                      onClick={(e) => handleDeleteClient(e, client.id)}
+                      className="p-2 text-slate-300 hover:text-rose-600 transition-colors bg-slate-50 rounded-xl"
+                      title="Delete Restaurant"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
                 </div>
                 <h3 className="text-3xl font-black text-slate-900 mb-2 leading-tight">{client.name}</h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-10">{client.cuisine} • {client.city}</p>
