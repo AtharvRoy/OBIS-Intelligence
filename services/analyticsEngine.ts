@@ -13,37 +13,53 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   const onlineDependencyPct = (revenue.online / revenue.total) * 100;
   const discountPct = (costs.discounts / revenue.total) * 100;
 
-  // Granular Menu Analysis
-  let bestItem: MenuItem | undefined;
-  let worstItem: MenuItem | undefined;
+  // --- MENU INTELLIGENCE CALCULATIONS ---
+  // Ensure we have ranks calculated for the UI
+  const sortedByPopularity = [...menuItems].sort((a, b) => b.sold - a.sold);
+  const sortedByProfit = [...menuItems].sort((a, b) => b.contribution - a.contribution);
+  
+  const rankedMenuItems: MenuItem[] = menuItems.map(item => ({
+    ...item,
+    popularityRank: sortedByPopularity.findIndex(i => i.name === item.name) + 1,
+    profitRank: sortedByProfit.findIndex(i => i.name === item.name) + 1
+  }));
 
-  if (menuItems.length > 0) {
-    const sortedByProfit = [...menuItems].sort((a, b) => b.contribution - a.contribution);
-    const sortedByEfficiency = [...menuItems].sort((a, b) => (a.cost/a.price) - (b.cost/b.price));
-    
-    bestItem = sortedByProfit[0];
-    worstItem = sortedByEfficiency[sortedByEfficiency.length - 1];
+  let bestItem: MenuItem | undefined = rankedMenuItems.find(i => i.profitRank === 1);
+  let worstItem: MenuItem | undefined = [...rankedMenuItems].sort((a, b) => (a.cost/a.price) - (b.cost/b.price)).pop();
+
+  // --- DUAL AXIS HEALTH ANALYSIS ---
+  
+  // 1. Financial Health (Margin Focused)
+  let financialHealth: PerformanceBandLevel = 'Healthy';
+  if (margin < 10) financialHealth = 'Dangerous';
+  else if (margin < 18) financialHealth = 'Weak';
+
+  // 2. Structural Resilience (Dependencies & Operational Costs)
+  let structuralResilience: PerformanceBandLevel = 'Healthy';
+  if (onlineDependencyPct > 70 || foodCostPct > 36 || currentRecord.dataQualityScore < 70) {
+    structuralResilience = 'Dangerous';
+  } else if (onlineDependencyPct > 55 || foodCostPct > 33 || discountPct > 10) {
+    structuralResilience = 'Weak';
   }
 
-  // Metadata Classification
-  let level: PerformanceBandLevel = 'Healthy';
+  // Combined Performance Band (Legacy mapping for UI)
+  let level: PerformanceBandLevel = financialHealth === 'Dangerous' || structuralResilience === 'Dangerous' ? 'Dangerous' : 
+                                    (financialHealth === 'Weak' || structuralResilience === 'Weak' ? 'Weak' : 'Healthy');
+
   let reason = 'Operations are within healthy industry bands.';
   let driver = 'Balanced revenue/cost mix.';
   let riskLevel: RiskLevel = 'Low';
 
-  // DISCOUNT LEAKAGE DETECTION
   const isHighDiscount = discountPct > 10;
 
-  if (margin < 8 || foodCostPct > 36) {
-    level = 'Dangerous';
+  if (level === 'Dangerous') {
     riskLevel = 'High';
-    reason = margin < 8 ? 'Net margin is in the critical danger zone.' : 'Food cost is cannibalizing all profits.';
+    reason = margin < 10 ? 'Net margin is in the critical danger zone.' : 'Structural dependencies are cannibalizing profit.';
     driver = isHighDiscount ? 'Discount Burn' : (foodCostPct > 36 ? 'Procurement & Waste' : 'High Fixed Overheads');
-  } else if (margin < 15 || foodCostPct > 33 || onlineDependencyPct > 60 || isHighDiscount) {
-    level = 'Weak';
+  } else if (level === 'Weak') {
     riskLevel = 'Medium';
-    reason = isHighDiscount ? `Discount burn (${discountPct.toFixed(1)}%) is eroding your base margin.` : (margin < 15 ? 'Profitability is trailing the target.' : 'External dependency is high.');
-    driver = isHighDiscount ? 'Revenue Leakage' : (onlineDependencyPct > 60 ? 'Platform Commissions' : 'Menu Costing');
+    reason = isHighDiscount ? `Discount burn (${discountPct.toFixed(1)}%) is eroding your base margin.` : 'Efficiency optimization required.';
+    driver = isHighDiscount ? 'Revenue Leakage' : (onlineDependencyPct > 55 ? 'Platform Commissions' : 'Menu Costing');
   }
 
   // Delta calculations
@@ -67,7 +83,6 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     };
   }
 
-  // ATTENTION SCORE (Priority Metric)
   const attentionScore = Math.min(100, 
     (100 - currentRecord.dataQualityScore) * 0.4 + 
     (riskLevel === 'High' ? 40 : riskLevel === 'Medium' ? 15 : 0) + 
@@ -76,22 +91,20 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   );
 
   const narrative = {
-    health: `The business is currently operating at a ${level} level. Net margin is ${margin.toFixed(1)}%.`,
+    health: `Business is ${financialHealth} financially and ${structuralResilience} structurally.`,
     change: isHighDiscount 
-      ? `Promotional spending is high at ${discountPct.toFixed(1)}% of revenue. Every ₹100 earned is losing ₹${discountPct.toFixed(0)} to discounts.`
+      ? `Promotional spending is high at ${discountPct.toFixed(1)}% of revenue. This is a primary leakage point.`
       : (bestItem 
-        ? `${bestItem.name} is your top anchor (₹${bestItem.contribution.toLocaleString()} profit contribution), while ${worstItem?.name} is your highest cost-drag item.`
+        ? `${bestItem.name} is driving ${((bestItem.contribution/revenue.total)*100).toFixed(1)}% of total revenue contribution.`
         : 'Initial pilot baseline created.'),
     action: isHighDiscount 
-      ? 'Audit platform-wide "Auto-Apply" coupons. Target a discount ceiling of 7% to recover margin.'
+      ? 'Audit platform-wide "Auto-Apply" coupons. Set a hard ceiling of 8% for promotional burn.'
       : (worstItem && (worstItem.cost/worstItem.price) > 0.45
-        ? `Audit the preparation cost of ${worstItem.name} immediately; it is currently cannibalizing your margin.`
+        ? `Audit prep waste for ${worstItem.name} immediately; margin is ${((1 - worstItem.cost/worstItem.price)*100).toFixed(1)}%.`
         : level === 'Healthy' 
-          ? 'Increase marketing spend on high-margin items to scale profit.' 
-          : `Address ${driver} issues to restore health.`)
+          ? 'Maintain current procurement standards while scaling marketing.' 
+          : `Prioritize ${driver} optimization to move health to the next band.`)
   };
-
-  const performanceBand: PerformanceMetadata = { level, reason, driver, narrative };
 
   return {
     revenue: revenue.total,
@@ -99,7 +112,9 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     netProfit,
     margin,
     riskLevel,
-    performanceBand,
+    financialHealth,
+    structuralResilience,
+    performanceBand: { level, reason, driver, narrative },
     foodCostPct,
     staffCostPct,
     onlineDependencyPct,

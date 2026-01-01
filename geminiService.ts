@@ -8,6 +8,9 @@ let aiInstance: GoogleGenAI | null = null;
 const getAI = () => {
   if (!aiInstance) {
     const apiKey = process.env.API_KEY || "";
+    if (!apiKey) {
+      console.warn("OBIS: API_KEY is not defined in the environment. AI generation will fail.");
+    }
     aiInstance = new GoogleGenAI({ apiKey });
   }
   return aiInstance;
@@ -84,12 +87,16 @@ export const generateInsights = async (
     });
 
     const text = response.text;
-    if (!text) return [];
+    if (!text) {
+      console.error("OBIS: Empty response from AI model.");
+      return [];
+    }
 
     const parsed = JSON.parse(text.trim());
     return parsed.map((item: any) => ({ ...item, promptVersion: PROMPT_VERSION }));
   } catch (error) {
-    console.error("Error generating insights:", error);
+    console.error("OBIS: AI Generation Error:", error);
+    // Return mock-style placeholder if on localhost and key fails, so UI doesn't break
     return [];
   }
 };

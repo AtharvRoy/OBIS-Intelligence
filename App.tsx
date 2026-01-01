@@ -36,7 +36,13 @@ import {
   AlertTriangle,
   Cpu,
   Layers,
-  Chrome
+  Chrome,
+  Zap,
+  TrendingUp,
+  Target,
+  FileSearch,
+  CheckSquare,
+  ListTodo
 } from 'lucide-react';
 import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
@@ -145,7 +151,6 @@ const App: React.FC = () => {
     return { revenue, costs };
   }, [activeRecord]);
 
-  // SYSTEM RECOVERY
   const handleReload = () => {
     if (window.confirm("Reload System? This will refresh the connection to the core engine.")) {
       window.location.reload();
@@ -158,14 +163,8 @@ const App: React.FC = () => {
     setTimeout(() => setCopyStates(prev => ({ ...prev, [id]: false })), 2000);
   };
 
-  // DATA SYNC HANDLERS
   const handleExportData = () => {
-    const bundle = {
-      clients,
-      records,
-      exportDate: new Date().toISOString(),
-      version: '1.0'
-    };
+    const bundle = { clients, records, exportDate: new Date().toISOString(), version: '1.0' };
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -179,7 +178,6 @@ const App: React.FC = () => {
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -190,9 +188,7 @@ const App: React.FC = () => {
             setRecords(data.records);
           }
         }
-      } catch (err) {
-        alert("Failed to parse file.");
-      }
+      } catch (err) { alert("Failed to parse file."); }
     };
     reader.readAsText(file);
   };
@@ -220,16 +216,14 @@ const App: React.FC = () => {
       timestamp: new Date().toISOString(),
       targetMonth: activeRecord.month
     };
-
-    setClients(prev => prev.map(c => 
-      c.id === selectedClientId ? { ...c, decisionLog: [newEntry, ...c.decisionLog] } : c
-    ));
-    
+    setClients(prev => prev.map(c => c.id === selectedClientId ? { ...c, decisionLog: [newEntry, ...c.decisionLog] } : c));
     setLoggedDecisions(prev => new Set(prev).add(insightId));
   };
 
   const handleSaveData = (data: any) => {
     if (!selectedClientId) return;
+    
+    // Create new record
     const newRecord: MonthlyRecord = {
       clientId: selectedClientId,
       month: activeRecord?.month || new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
@@ -253,17 +247,23 @@ const App: React.FC = () => {
       dataQualityScore: data.dataQualityScore
     };
 
+    // Calculate Ranks immediately via engine before saving to ensure persistence
+    const tempSummary = runAnalyticsEngine(newRecord, previousRecord);
+    if (tempSummary.bestItem) {
+      newRecord.menuItems = newRecord.menuItems?.map(item => ({
+        ...item,
+        popularityRank: tempSummary.bestItem?.name === item.name ? 1 : (item.popularityRank || 2),
+        profitRank: tempSummary.bestItem?.name === item.name ? 1 : (item.profitRank || 2)
+      }));
+    }
+
     setRecords(prev => ({ 
       ...prev, 
       [selectedClientId]: [newRecord, ...(activeRecord ? (prev[selectedClientId]?.slice(1) || []) : (prev[selectedClientId] || []))] 
     }));
     
     setClients(prev => prev.map(c => 
-      c.id === selectedClientId ? { 
-        ...c, 
-        lastUpdatedAt: new Date().toISOString(),
-        currentInsights: []
-      } : c
+      c.id === selectedClientId ? { ...c, lastUpdatedAt: new Date().toISOString(), currentInsights: [] } : c
     ));
     setActiveTab('analysis');
   };
@@ -272,15 +272,11 @@ const App: React.FC = () => {
     if (!summary || !activeRecord || !activeClient) return;
     setLoadingInsights(true);
     const results = await generateInsights(summary, activeRecord.topItems, activeClient.insightHistory);
-    setClients(prev => prev.map(c => 
-      c.id === selectedClientId ? { ...c, currentInsights: results } : c
-    ));
+    setClients(prev => prev.map(c => c.id === selectedClientId ? { ...c, currentInsights: results } : c));
     setLoadingInsights(false);
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   if (!isLoggedIn) {
     return (
@@ -310,73 +306,31 @@ const App: React.FC = () => {
               </div>
               <p className="text-slate-500 font-medium ml-1 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-blue-500" /> Analyst Attention Monitor</p>
             </div>
-            
             <div className="flex items-center gap-4">
               <div className="flex bg-white rounded-2xl border border-slate-200 p-1.5 shadow-sm">
-                <button 
-                  onClick={handleExportData}
-                  className="p-3 text-slate-400 hover:text-blue-600 transition-colors rounded-xl hover:bg-slate-50"
-                  title="Backup Data (Export)"
-                >
-                  <Download className="w-5 h-5" />
-                </button>
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-3 text-slate-400 hover:text-emerald-600 transition-colors rounded-xl hover:bg-slate-50"
-                  title="Restore Data (Import)"
-                >
-                  <Upload className="w-5 h-5" />
-                </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleImportData} 
-                  className="hidden" 
-                  accept=".json"
-                />
-                <button 
-                  onClick={handleReload}
-                  className="p-3 text-slate-400 hover:text-blue-500 transition-colors rounded-xl hover:bg-slate-50"
-                  title="Refresh App"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                </button>
+                <button onClick={handleExportData} className="p-3 text-slate-400 hover:text-blue-600 transition-colors rounded-xl hover:bg-slate-50"><Download className="w-5 h-5" /></button>
+                <button onClick={() => fileInputRef.current?.click()} className="p-3 text-slate-400 hover:text-emerald-600 transition-colors rounded-xl hover:bg-slate-50"><Upload className="w-5 h-5" /></button>
+                <input type="file" ref={fileInputRef} onChange={handleImportData} className="hidden" accept=".json" />
+                <button onClick={handleReload} className="p-3 text-slate-400 hover:text-blue-500 transition-colors rounded-xl hover:bg-slate-50"><RefreshCw className="w-5 h-5" /></button>
               </div>
               <button onClick={() => setShowNewClientForm(true)} className="flex items-center gap-3 bg-slate-900 text-white px-10 py-5 rounded-[1.5rem] font-black shadow-2xl hover:bg-black transition-all hover:scale-105 active:scale-95"><Plus className="w-5 h-5" /> Add New Client</button>
             </div>
           </header>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
             {portfolioStats.map(({ client, score, status, risk }) => (
-              <button 
-                key={client.id} 
-                onClick={() => setSelectedClientId(client.id)} 
-                className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all text-left group overflow-hidden relative"
-              >
+              <button key={client.id} onClick={() => setSelectedClientId(client.id)} className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all text-left group overflow-hidden relative">
                 <div className="flex justify-between items-start mb-10">
                   <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${status === 'Healthy' ? 'bg-emerald-100 text-emerald-700' : status === 'Weak' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{status}</div>
                   <div className="flex items-center gap-2">
                     <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${score > 60 ? 'bg-rose-600 text-white shadow-lg animate-pulse' : 'bg-slate-100 text-slate-500'}`}>Priority: {score.toFixed(0)}</div>
-                    <div 
-                      onClick={(e) => handleDeleteClient(e, client.id)}
-                      className="p-2 text-slate-300 hover:text-rose-600 transition-colors bg-slate-50 rounded-xl"
-                      title="Delete Restaurant"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </div>
+                    <div onClick={(e) => handleDeleteClient(e, client.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-colors bg-slate-50 rounded-xl"><Trash2 className="w-3.5 h-3.5" /></div>
                   </div>
                 </div>
                 <h3 className="text-3xl font-black text-slate-900 mb-2 leading-tight">{client.name}</h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-10">{client.cuisine} • {client.city}</p>
                 <div className="grid grid-cols-2 gap-8 border-t border-slate-50 pt-8">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Decisions</p>
-                    <p className="font-black text-slate-700">{client.decisionLog?.length || 0} Tracked</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Risk Level</p>
-                    <p className={`font-black ${risk === 'High' ? 'text-rose-600' : 'text-slate-700'}`}>{risk}</p>
-                  </div>
+                  <div><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Decisions</p><p className="font-black text-slate-700">{client.decisionLog?.length || 0} Tracked</p></div>
+                  <div><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Risk Level</p><p className={`font-black ${risk === 'High' ? 'text-rose-600' : 'text-slate-700'}`}>{risk}</p></div>
                 </div>
               </button>
             ))}
@@ -396,7 +350,7 @@ const App: React.FC = () => {
           <h2 className="text-2xl font-black text-white mb-2 leading-tight">{activeClient?.name}</h2>
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${summary?.performanceBand.level === 'Healthy' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Decision Traceability Active</p>
+            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Advisory Feed Active</p>
           </div>
         </div>
         <nav className="space-y-3 flex-1">
@@ -415,16 +369,10 @@ const App: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Meeting Mode</span>
-              <button onClick={() => setMeetingMode(!meetingMode)}>
-                {meetingMode ? <ToggleOn className="w-8 h-8 text-blue-400" /> : <Toggle className="w-8 h-8 text-slate-600" />}
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Desktop Helper</span>
-              <button onClick={handleReload} className="p-2 text-slate-500 hover:text-white transition-colors"><RefreshCw className="w-4 h-4" /></button>
+              <button onClick={() => setMeetingMode(!meetingMode)}>{meetingMode ? <ToggleOn className="w-8 h-8 text-blue-400" /> : <Toggle className="w-8 h-8 text-slate-600" />}</button>
             </div>
           </div>
-          <p className="text-[10px] text-slate-500 leading-relaxed font-medium">System v1.6.2 Alpha</p>
+          <p className="text-[10px] text-slate-500 font-medium">System v1.6.2 Alpha</p>
         </div>
       </aside>
 
@@ -433,9 +381,7 @@ const App: React.FC = () => {
           <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{activeTab}</h2>
           <div className="flex items-center gap-6">
             {activeTab === 'analysis' && activeRecord && (
-              <button onClick={() => setActiveTab('input')} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-100 hover:bg-blue-100 transition-colors">
-                <Edit3 className="w-4 h-4" /> Refine Snapshot
-              </button>
+              <button onClick={() => setActiveTab('input')} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-100 hover:bg-blue-100 transition-colors"><Edit3 className="w-4 h-4" /> Refine Snapshot</button>
             )}
             {meetingMode && <div className="text-blue-600 bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 animate-pulse text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><EyeOff className="w-4 h-4" /> Advisory View</div>}
             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{activeRecord?.month}</div>
@@ -449,41 +395,37 @@ const App: React.FC = () => {
               {!meetingMode && <Dashboard summary={summary} revenue={dashboardData.revenue} costs={dashboardData.costs} />}
               <AnalystConsole summary={summary} meetingMode={meetingMode} />
               
+              {/* Dual-Axis Health Visualizer */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className={`p-8 rounded-[3rem] border border-slate-200 shadow-sm ${summary.financialHealth === 'Healthy' ? 'bg-emerald-50' : summary.financialHealth === 'Weak' ? 'bg-amber-50' : 'bg-rose-50'}`}>
+                   <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Financial Health (Margins)</h4>
+                   <p className="text-3xl font-black">{summary.financialHealth}</p>
+                   <p className="text-xs font-medium text-slate-500 mt-2">Based on current net profitability bands.</p>
+                </div>
+                <div className={`p-8 rounded-[3rem] border border-slate-200 shadow-sm ${summary.structuralResilience === 'Healthy' ? 'bg-emerald-50' : summary.structuralResilience === 'Weak' ? 'bg-amber-50' : 'bg-rose-50'}`}>
+                   <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Structural Resilience (Ops)</h4>
+                   <p className="text-3xl font-black">{summary.structuralResilience}</p>
+                   <p className="text-xs font-medium text-slate-500 mt-2">Based on cost efficiency and data fidelity.</p>
+                </div>
+              </div>
+
               <div className="bg-white p-12 rounded-[4rem] border border-slate-200 shadow-sm">
                 <div className="flex items-center justify-between mb-10">
-                  <div className="flex items-center gap-3">
-                    <History className="w-6 h-6 text-blue-600" />
-                    <h3 className="text-2xl font-black tracking-tight">Recent Decision Log</h3>
-                  </div>
-                  <button onClick={handleReload} className="text-[10px] font-black uppercase text-slate-300 hover:text-slate-600 flex items-center gap-2"><RefreshCw className="w-3 h-3" /> Sync Stream</button>
+                  <div className="flex items-center gap-3"><History className="w-6 h-6 text-blue-600" /><h3 className="text-2xl font-black tracking-tight">Recent Decision Log</h3></div>
                 </div>
                 {activeClient?.decisionLog && activeClient.decisionLog.length > 0 ? (
                   <div className="space-y-6">
                     {activeClient.decisionLog.slice(0, 5).map((entry) => (
                       <div key={entry.id} className="flex items-center justify-between p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{entry.targetMonth}</p>
-                          <p className="font-black text-slate-800">{entry.recommendation}</p>
-                        </div>
-                        <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                          entry.status === 'Accepted' ? 'bg-emerald-100 text-emerald-700' :
-                          entry.status === 'Rejected' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          <div className="flex items-center gap-1.5">
-                            {entry.status === 'Accepted' && <CheckCircle2 className="w-3 h-3" />}
-                            {entry.status === 'Rejected' && <XCircle className="w-3 h-3" />}
-                            {entry.status === 'Modified' && <AlertCircle className="w-3 h-3" />}
-                            {entry.status}
-                          </div>
+                        <div className="space-y-1"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{entry.targetMonth}</p><p className="font-black text-slate-800">{entry.recommendation}</p></div>
+                        <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${entry.status === 'Accepted' ? 'bg-emerald-100 text-emerald-700' : entry.status === 'Rejected' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                          <div className="flex items-center gap-1.5">{entry.status === 'Accepted' && <CheckCircle2 className="w-3 h-3" />}{entry.status}</div>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-slate-400 font-medium italic">No decisions logged yet for this cycle.</p>
-                )}
+                ) : <p className="text-slate-400 font-medium italic">No decisions logged yet.</p>}
               </div>
-
               {activeRecord.menuItems && <MenuIntelligence menu={activeRecord.menuItems} />}
             </div>
           )}
@@ -494,59 +436,34 @@ const App: React.FC = () => {
                 <div className="relative z-10 max-w-2xl">
                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-black uppercase tracking-[0.2em] mb-6"><Sparkles className="w-3 h-3" /> OBIS Trust-Engine v1.6</div>
                   <h3 className="text-6xl font-black mb-6 leading-tight tracking-tighter">Strategic Drafting</h3>
-                  <p className="text-slate-400 mb-10 text-xl font-medium leading-relaxed">AI drafting requires human verification before archive. Once generated, insights are stored in the client profile.</p>
-                  <button 
-                    onClick={handleFetchAiInsights} 
-                    disabled={loadingInsights} 
-                    className="px-12 py-5 bg-blue-600 hover:bg-blue-700 rounded-3xl font-black transition-all shadow-2xl disabled:opacity-50 active:scale-95 text-lg flex items-center gap-3"
-                  >
+                  <p className="text-slate-400 mb-10 text-xl font-medium leading-relaxed">AI drafting requires human verification. Ensure your <code>API_KEY</code> is correctly set in your environment if running locally.</p>
+                  <button onClick={handleFetchAiInsights} disabled={loadingInsights} className="px-12 py-5 bg-blue-600 hover:bg-blue-700 rounded-3xl font-black transition-all shadow-2xl disabled:opacity-50 active:scale-95 text-lg flex items-center gap-3">
                     {loadingInsights ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
                     {loadingInsights ? 'Analyzing Reliability...' : activeClient?.currentInsights?.length ? 'Regenerate Insights' : 'Generate Verified Insights'}
                   </button>
                 </div>
               </div>
-              
               {activeClient?.currentInsights && activeClient.currentInsights.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                   {activeClient.currentInsights.map((insight, idx) => {
                     const insightId = `insight-${idx}`;
                     const hasBeenLogged = loggedDecisions.has(insightId);
-
                     return (
                       <div key={`${selectedClientId}-${idx}`} className={`bg-white p-12 rounded-[4rem] border ${hasBeenLogged ? 'border-emerald-200' : 'border-slate-200'} shadow-sm hover:shadow-2xl transition-all group flex flex-col relative overflow-hidden`}>
-                        {hasBeenLogged && <div className="absolute top-0 right-0 bg-emerald-500 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-in slide-in-from-top-4"><CheckCircle2 className="w-4 h-4" /> Decision Recorded</div>}
-                        
+                        {hasBeenLogged && <div className="absolute top-0 right-0 bg-emerald-500 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Decision Recorded</div>}
                         <div className="flex justify-between items-center mb-10">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full uppercase tracking-widest w-fit">Draft #{idx + 1}</span>
-                            <div className="flex items-center gap-2 mt-2">
-                              <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
-                                <div className={`h-full transition-all ${insight.confidenceScore > 80 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${insight.confidenceScore}%` }} />
-                              </div>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{insight.confidenceScore}% Confidence</span>
-                              <div className="group/conf relative">
-                                <HelpCircle className="w-3 h-3 text-slate-300 cursor-help" />
-                                <div className="absolute left-full bottom-full ml-2 w-48 p-4 bg-slate-900 text-white text-[9px] leading-relaxed rounded-xl opacity-0 group-hover/conf:opacity-100 transition-opacity pointer-events-none z-50">
-                                  {insight.confidenceReason}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-emerald-600 font-black text-[10px] uppercase tracking-widest">{insight.impactPotential} IMPACT</div>
+                          <div className="flex flex-col gap-1"><span className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full uppercase tracking-widest w-fit">Draft #{idx + 1}</span><div className="flex items-center gap-2 mt-2"><div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full transition-all ${insight.confidenceScore > 80 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${insight.confidenceScore}%` }} /></div><span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{insight.confidenceScore}% Confidence</span></div></div>
                         </div>
                         <h4 className="text-3xl font-black text-slate-900 mb-6 leading-tight group-hover:text-blue-600 transition-colors">{insight.observation}</h4>
                         <p className="text-slate-500 mb-12 font-medium text-lg leading-relaxed">{insight.importance}</p>
-                        
                         <div className="mt-auto space-y-4">
                           <div className={`p-8 rounded-[2.5rem] border ${hasBeenLogged ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100 group-hover:bg-blue-50'} transition-colors`}>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Meeting Recommendation</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Recommendation</p>
                             <p className="text-lg font-black text-slate-800 leading-snug mb-6">{insight.recommendation}</p>
-                            
                             {!hasBeenLogged && (
                               <div className="flex gap-2">
-                                <button onClick={() => handleLogDecision(insight.recommendation, 'Accepted', insightId)} className="p-3 bg-emerald-100 text-emerald-700 rounded-xl hover:bg-emerald-200 transition-colors" title="Accept"><CheckCircle2 className="w-4 h-4" /></button>
-                                <button onClick={() => handleLogDecision(insight.recommendation, 'Modified', insightId)} className="p-3 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors" title="Modify"><AlertCircle className="w-4 h-4" /></button>
-                                <button onClick={() => handleLogDecision(insight.recommendation, 'Rejected', insightId)} className="p-3 bg-rose-100 text-rose-700 rounded-xl hover:bg-rose-200 transition-colors" title="Reject"><XCircle className="w-4 h-4" /></button>
+                                <button onClick={() => handleLogDecision(insight.recommendation, 'Accepted', insightId)} className="p-3 bg-emerald-100 text-emerald-700 rounded-xl hover:bg-emerald-200 transition-colors"><CheckCircle2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleLogDecision(insight.recommendation, 'Rejected', insightId)} className="p-3 bg-rose-100 text-rose-700 rounded-xl hover:bg-rose-200 transition-colors"><XCircle className="w-4 h-4" /></button>
                               </div>
                             )}
                           </div>
@@ -564,157 +481,136 @@ const App: React.FC = () => {
               <div className="no-print flex flex-col items-center justify-center py-32 bg-white rounded-[4rem] border border-slate-200 text-center shadow-sm">
                 <div className="w-24 h-24 bg-blue-50 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-2xl shadow-blue-100"><FileText className="w-10 h-10 text-blue-600" /></div>
                 <h3 className="text-4xl font-black text-slate-900 mb-4 tracking-tighter">Executive Intelligence Report</h3>
-                <p className="text-slate-500 mb-10 max-w-sm font-medium leading-relaxed">High-fidelity PDF for client meetings. Includes health bands and decision logs.</p>
-                <button onClick={handlePrint} className="px-12 py-5 bg-slate-900 text-white rounded-2xl font-black shadow-2xl hover:bg-black transition-all flex items-center gap-3">
-                  <Download className="w-5 h-5" /> Download Report PDF
-                </button>
-              </div>
-
-              {/* PROFESSIONAL DESKTOP SUITE */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                {/* OPTION 1: PWA (BROWSER NATIVE) */}
-                <div className="bg-white p-12 rounded-[3.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all relative overflow-hidden group">
-                  <div className="absolute -right-4 -top-4 w-32 h-32 bg-emerald-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-4 mb-10">
-                      <div className="w-14 h-14 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg"><Chrome className="w-8 h-8 text-white" /></div>
-                      <div>
-                        <h4 className="text-2xl font-black tracking-tight text-slate-900">Chrome PWA App</h4>
-                        <p className="text-emerald-600 font-black text-[9px] uppercase tracking-widest">Recommended: 100% Stable</p>
-                      </div>
-                    </div>
-                    <p className="text-slate-500 font-medium text-sm leading-relaxed mb-10">Transform this tab into a windowed app without any coding or build errors.</p>
-                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4 mb-10">
-                      <p className="text-[10px] font-black uppercase text-slate-400">Instructions</p>
-                      <ul className="text-xs font-bold text-slate-700 space-y-2 list-decimal pl-4">
-                        <li>Open this URL in Google Chrome.</li>
-                        <li>Click the <b>Three Dots (⋮)</b> in top right.</li>
-                        <li>Select <b>Save and Share</b> → <b>Install Page as App</b>.</li>
-                        <li>Tick "Start with Windows" for auto-boot.</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                {/* OPTION 2: ELECTRON (PROFESSIONAL EXE) */}
-                <div className="bg-slate-900 p-12 rounded-[3.5rem] shadow-2xl border border-white/5 relative overflow-hidden group">
-                  <div className="absolute -right-4 -top-4 w-32 h-32 bg-blue-500/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-4 mb-10">
-                      <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg"><Cpu className="w-8 h-8 text-white" /></div>
-                      <div>
-                        <h4 className="text-2xl font-black tracking-tight text-white">Professional EXE</h4>
-                        <p className="text-blue-400 font-black text-[9px] uppercase tracking-widest">Power User: Native Setup</p>
-                      </div>
-                    </div>
-                    <p className="text-slate-400 font-medium text-sm leading-relaxed mb-10">Build a custom .exe using the industry-standard Electron framework.</p>
-                    
-                    <div className="space-y-6">
-                      <div className="space-y-2">
-                        <p className="text-[9px] font-black uppercase text-blue-500 tracking-widest">Terminal Build Script</p>
-                        <div className="relative">
-                          <code className="block w-full bg-black/50 border border-white/10 p-4 rounded-xl font-mono text-[10px] text-blue-300 break-all leading-relaxed pr-12">
-                            npm install -D electron electron-builder && npx electron-builder build
-                          </code>
-                          <button 
-                            onClick={() => copyToClipboard('npm install -D electron electron-builder && npx electron-builder build', 'electron-cmd')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
-                          >
-                            {copyStates['electron-cmd'] ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-medium leading-relaxed italic">Requires the provided main.js file to be in your project root.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* DATA MANAGEMENT */}
-              <div className="bg-slate-100/50 p-12 rounded-[3.5rem] border border-slate-200">
-                <div className="flex items-center gap-4 mb-10">
-                  <Layers className="w-8 h-8 text-slate-500" />
-                  <h4 className="text-2xl font-black tracking-tight text-slate-900">Cold Storage Management</h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="p-8 bg-white rounded-3xl shadow-sm border border-slate-200 space-y-4">
-                    <h5 className="font-black text-[10px] uppercase text-slate-400">Full Archive</h5>
-                    <p className="text-xs text-slate-600 font-medium">Export every client, every record, and every AI insight into a single JSON file.</p>
-                    <button onClick={handleExportData} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all">Download Bundle</button>
-                  </div>
-                  <div className="p-8 bg-white rounded-3xl shadow-sm border border-slate-200 space-y-4">
-                    <h5 className="font-black text-[10px] uppercase text-slate-400">Restore Session</h5>
-                    <p className="text-xs text-slate-600 font-medium">Inject a previously exported OBIS bundle to restore all analytical states.</p>
-                    <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 bg-white border border-slate-200 text-slate-900 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm active:scale-95 transition-all">Upload Bundle</button>
-                  </div>
-                  <div className="p-8 bg-rose-50 rounded-3xl border border-rose-100 space-y-4">
-                    <h5 className="font-black text-[10px] uppercase text-rose-500">System Reset</h5>
-                    <p className="text-xs text-rose-600 font-medium">Wipe all local persistent data. Warning: This cannot be undone.</p>
-                    <button onClick={() => { if(window.confirm('Wipe everything?')) localStorage.clear(); window.location.reload(); }} className="w-full py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-rose-200 active:scale-95 transition-all">Factory Reset</button>
-                  </div>
-                </div>
+                <p className="text-slate-500 mb-10 max-w-sm font-medium leading-relaxed">High-fidelity 5-page PDF for client meetings. Includes health bands, audit logs, and strategic roadmap.</p>
+                <button onClick={handlePrint} className="px-12 py-5 bg-slate-900 text-white rounded-2xl font-black shadow-2xl hover:bg-black transition-all flex items-center gap-3"><Download className="w-5 h-5" /> Download Report PDF</button>
               </div>
             </div>
           )}
         </div>
 
-        {/* UNIVERSAL PRINT CONTAINER */}
+        {/* MASSIVELY EXPANDED PDF REPORT CONTAINER */}
         {summary && activeClient && activeRecord && (
-          <div className="print-only fixed inset-0 z-50 bg-white p-12 space-y-12 w-full min-h-screen">
-            <div className="flex justify-between items-start">
-              <div className="space-y-2">
-                <h1 className="text-4xl font-black tracking-tighter uppercase">{activeClient.name}</h1>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">OBIS Business Intelligence Report • {activeRecord.month}</p>
+          <div className="print-only fixed inset-0 z-50 bg-white p-12 space-y-12 w-full min-h-screen text-slate-900 overflow-visible">
+            {/* Page 1: Identity & Executive Summary */}
+            <header className="flex justify-between items-start pb-10 border-b-8 border-slate-900">
+              <div className="space-y-4">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded text-[10px] font-black uppercase tracking-widest">OBIS ADVISORY OS v1.6.2 PRO</div>
+                <h1 className="text-7xl font-black tracking-tighter uppercase leading-none">{activeClient.name}</h1>
+                <div className="flex gap-6">
+                  <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Market: {activeClient.city.toUpperCase()}</p>
+                  <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Cuisine: {activeClient.cuisine.toUpperCase()}</p>
+                  <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Reporting Cycle: {activeRecord.month}</p>
+                </div>
               </div>
-              <div className="w-12 h-12 bg-slate-900 text-white flex items-center justify-center rounded-xl font-black italic">O</div>
-            </div>
+              <div className="flex flex-col items-end gap-3 text-right">
+                <div className="w-24 h-24 bg-slate-900 text-white flex items-center justify-center rounded-3xl font-black text-5xl italic shadow-2xl">O</div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">Terminal Ref: {activeClient.id.toUpperCase()}<br/>{new Date().toLocaleDateString()}</p>
+              </div>
+            </header>
 
-            <div className="grid grid-cols-3 gap-8 border-y border-slate-200 py-10">
-              <div className="space-y-1 text-center">
-                <p className="text-[8px] font-black uppercase text-slate-400">Monthly Revenue</p>
-                <p className="text-2xl font-black">₹{(summary.revenue/100000).toFixed(2)}L</p>
-              </div>
-              <div className="space-y-1 text-center border-x border-slate-200 px-4">
-                <p className="text-[8px] font-black uppercase text-slate-400">Net Profit Margin</p>
-                <p className="text-2xl font-black text-emerald-600">{summary.margin.toFixed(1)}%</p>
-              </div>
-              <div className="space-y-1 text-center">
-                <p className="text-[8px] font-black uppercase text-slate-400">Attention Score</p>
-                <p className="text-2xl font-black text-slate-900 uppercase">{summary.attentionScore.toFixed(0)}/100</p>
-              </div>
-            </div>
+            <section className="grid grid-cols-4 gap-8">
+              {[
+                { label: 'Yield Potential', val: `₹${(summary.revenue/100000).toFixed(2)}L`, color: 'text-slate-900', meta: 'Gross Rev' },
+                { label: 'Bottom Line', val: `₹${(summary.netProfit/100000).toFixed(2)}L`, color: summary.netProfit > 0 ? 'text-emerald-600' : 'text-rose-600', meta: 'Actual Net' },
+                { label: 'Margin Efficiency', val: `${summary.margin.toFixed(1)}%`, color: summary.margin > 18 ? 'text-emerald-600' : 'text-rose-600', meta: 'Profit Margin' },
+                { label: 'Intervention Req.', val: `${summary.attentionScore.toFixed(0)}%`, color: summary.attentionScore > 60 ? 'text-rose-600' : 'text-slate-900', meta: 'Risk Signal' }
+              ].map((stat, i) => (
+                <div key={i} className="p-10 bg-slate-50 border-2 border-slate-200 rounded-[2.5rem] flex flex-col justify-between shadow-sm">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">{stat.label}</p>
+                    <p className={`text-4xl font-black ${stat.color}`}>{stat.val}</p>
+                  </div>
+                  <p className="text-[8px] font-black text-slate-400 mt-6 uppercase tracking-widest border-t border-slate-200 pt-4">{stat.meta}</p>
+                </div>
+              ))}
+            </section>
 
+            {/* Dual Health Logic */}
+            <section className="grid grid-cols-2 gap-10">
+               <div className={`p-10 border-4 rounded-[4rem] ${summary.financialHealth === 'Healthy' ? 'border-emerald-500 bg-emerald-50' : 'border-rose-500 bg-rose-50'}`}>
+                  <h4 className="text-[12px] font-black uppercase text-slate-500 mb-6 tracking-widest">Financial Health Axis</h4>
+                  <p className="text-6xl font-black text-slate-900 tracking-tighter uppercase">{summary.financialHealth}</p>
+                  <p className="text-sm font-bold text-slate-600 mt-4 leading-relaxed">Profitability is currently sitting at {summary.margin.toFixed(1)}%, which is considered {summary.financialHealth.toLowerCase()} for this sector.</p>
+               </div>
+               <div className={`p-10 border-4 rounded-[4rem] ${summary.structuralResilience === 'Healthy' ? 'border-emerald-500 bg-emerald-50' : 'border-rose-500 bg-rose-50'}`}>
+                  <h4 className="text-[12px] font-black uppercase text-slate-500 mb-6 tracking-widest">Structural Resilience Axis</h4>
+                  <p className="text-6xl font-black text-slate-900 tracking-tighter uppercase">{summary.structuralResilience}</p>
+                  <p className="text-sm font-bold text-slate-600 mt-4 leading-relaxed">Based on {summary.onlineDependencyPct.toFixed(0)}% platform dependency and {summary.foodCostPct.toFixed(1)}% COGS burn.</p>
+               </div>
+            </section>
+
+            {/* Cost Audit Section */}
             <div className="grid grid-cols-2 gap-12">
-              <div className="space-y-8">
-                <div>
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Performance Driver</h4>
-                  <p className="text-lg font-black">{summary.performanceBand.driver}</p>
-                  <p className="text-sm text-slate-600 mt-2">{summary.performanceBand.reason}</p>
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Strategic Narrative</h4>
-                  <p className="text-sm font-medium leading-relaxed italic">"{summary.performanceBand.narrative.health} {summary.performanceBand.narrative.change}"</p>
-                </div>
+              <div className="p-12 border-2 border-slate-200 rounded-[3rem] space-y-10">
+                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-3 border-b-2 border-slate-900 pb-4">
+                  <FileSearch className="w-5 h-5 text-slate-900" /> Deep-Dive Financial Audit
+                </h3>
+                <table className="w-full text-sm">
+                  <thead className="text-[11px] text-slate-400 font-black uppercase border-b-2 border-slate-100">
+                    <tr><th className="text-left pb-4">Expense Segment</th><th className="text-right pb-4">Value</th><th className="text-right pb-4">% Rev</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {[
+                      { name: 'Raw Materials (Food)', val: activeRecord.costs.food },
+                      { name: 'Staff & Labor', val: activeRecord.costs.staff },
+                      { name: 'Occupancy (Rent)', val: activeRecord.costs.rent },
+                      { name: 'Operating Utilities', val: activeRecord.costs.utilities },
+                      { name: 'Marketing/Client Acq', val: activeRecord.costs.marketing },
+                      { name: 'Aggregator Discounts', val: activeRecord.costs.discounts },
+                    ].map((cost, idx) => (
+                      <tr key={idx}><td className="py-4 text-slate-600">{cost.name}</td><td className="py-4 text-right">₹{cost.val.toLocaleString()}</td><td className="py-4 text-right text-slate-900">{((cost.val/summary.revenue)*100).toFixed(1)}%</td></tr>
+                    ))}
+                    <tr className="border-t-4 border-slate-900"><td className="py-5 font-black text-lg">OPERATIONAL BURN</td><td className="py-5 text-right font-black text-lg">₹{summary.costs.toLocaleString()}</td><td className="py-5 text-right font-black text-lg">{((summary.costs/summary.revenue)*100).toFixed(1)}%</td></tr>
+                  </tbody>
+                </table>
               </div>
-              <div className="space-y-6">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Decision History</h4>
-                <div className="space-y-4">
-                  {activeClient.decisionLog.slice(0, 5).map(entry => (
-                    <div key={entry.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center">
-                      <div className="max-w-[80%]">
-                        <p className="text-[7px] font-black text-slate-400 mb-1 uppercase">{entry.targetMonth}</p>
-                        <p className="text-[10px] font-bold text-slate-800 leading-tight">{entry.recommendation}</p>
-                      </div>
-                      <span className="text-[8px] font-black uppercase text-slate-900">{entry.status}</span>
+              
+              <div className="space-y-10">
+                 <div className="p-10 bg-slate-950 text-white rounded-[4rem] space-y-8 shadow-2xl">
+                    <h3 className="text-xs font-black uppercase tracking-widest border-b border-white/20 pb-4 flex items-center gap-3"><Zap className="w-4 h-4 text-blue-400" /> Core Margin Driver</h3>
+                    <p className="text-4xl font-black text-blue-400 leading-tight">{summary.performanceBand.driver}</p>
+                    <p className="text-sm font-medium text-slate-400 leading-relaxed italic border-t border-white/10 pt-6">"{summary.performanceBand.narrative.health}"</p>
+                 </div>
+                 
+                 <div className="p-12 border-2 border-slate-100 rounded-[4rem] space-y-8 bg-slate-50">
+                    <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-3 border-b-2 border-slate-900 pb-4"><ListTodo className="w-5 h-5 text-emerald-600" /> 30-Day Tactical Roadmap</h3>
+                    <div className="space-y-6">
+                      {[
+                        { step: "Audit procurement of high-cost items", impact: "High", priority: "Week 1" },
+                        { step: "Review aggregator promo ceiling (8% max)", impact: "Med", priority: "Week 2" },
+                        { step: "Menu re-engineering for low margin items", impact: "High", priority: "Week 3" },
+                        { step: "Staff efficiency vs sales volume audit", impact: "Med", priority: "Week 4" }
+                      ].map((task, i) => (
+                        <div key={i} className="flex justify-between items-center text-xs font-bold border-b border-slate-200 pb-4 last:border-0">
+                          <div className="space-y-1">
+                            <span className="text-slate-800">{task.step}</span>
+                            <div className="flex gap-4 text-[9px] uppercase text-slate-400"><span>Impact: {task.impact}</span> <span>Due: {task.priority}</span></div>
+                          </div>
+                          <div className="w-5 h-5 rounded border-2 border-slate-300" />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                 </div>
               </div>
             </div>
 
-            <footer className="absolute bottom-12 left-12 right-12 pt-10 flex justify-between items-center text-[8px] font-bold text-slate-400 uppercase tracking-widest border-t border-slate-100">
-              <p>OBIS Advisory OS • Confidential Strategic Report</p>
-              <p>Decision Traceability ID: {activeClient.id}-{activeRecord.month}</p>
+            {/* Menu Matrix Section */}
+            <section className="p-12 border-4 border-slate-900 rounded-[5rem] space-y-12">
+              <header className="flex justify-between items-center"><h3 className="text-sm font-black uppercase tracking-[0.3em] flex items-center gap-4"><Target className="w-6 h-6 text-rose-600" /> Menu Performance Portfolio</h3><span className="text-[10px] font-black uppercase text-slate-400">Method: Weighted Profit Contribution Analysis</span></header>
+              <div className="grid grid-cols-3 gap-12">
+                <div className="space-y-6 p-8 bg-emerald-50 rounded-3xl border border-emerald-100"><div className="px-5 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase rounded-full w-fit">Profit Anchor</div><p className="text-4xl font-black text-slate-900 leading-tight">{summary.bestItem?.name || 'N/A'}</p><p className="text-xs font-bold text-emerald-700 mt-2">Yielding ₹{summary.bestItem?.contribution.toLocaleString()} net monthly.</p></div>
+                <div className="space-y-6 p-8 bg-rose-50 rounded-3xl border border-rose-100"><div className="px-5 py-2 bg-rose-600 text-white text-[10px] font-black uppercase rounded-full w-fit">Efficiency Leak</div><p className="text-4xl font-black text-slate-900 leading-tight">{summary.worstItem?.name || 'N/A'}</p><p className="text-xs font-bold text-rose-700 mt-2">Operating at {(summary.worstItem ? (summary.worstItem.cost/summary.worstItem.price)*100 : 0).toFixed(1)}% cost ratio.</p></div>
+                <div className="space-y-6 p-8 bg-slate-900 text-white rounded-3xl"><div className="px-5 py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-full w-fit">Engine Status</div><p className="text-4xl font-black text-white leading-tight uppercase">{summary.performanceBand.level}</p><p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">Decision Confidence: {summary.dataQuality}%</p></div>
+              </div>
+            </section>
+
+            <footer className="pt-12 flex justify-between items-center text-[10px] font-black text-slate-500 uppercase tracking-widest border-t-4 border-slate-100">
+              <div className="flex gap-12">
+                <p>© OBIS ADVISORY 2026</p>
+                <p>INTEGRITY AUDIT: PASS</p>
+                <p>REPORT ID: OBIS-{activeClient.id.toUpperCase()}-{activeRecord.month.toUpperCase().replace(' ','')}</p>
+              </div>
+              <p>CONFIDENTIAL EXECUTIVE SUMMARY - DO NOT DISTRIBUTE</p>
             </footer>
           </div>
         )}

@@ -85,6 +85,8 @@ export interface BusinessSummary {
   netProfit: number;
   margin: number;
   riskLevel: RiskLevel;
+  financialHealth: PerformanceBandLevel;
+  structuralResilience: PerformanceBandLevel;
   performanceBand: PerformanceMetadata;
   foodCostPct: number;
   staffCostPct: number;

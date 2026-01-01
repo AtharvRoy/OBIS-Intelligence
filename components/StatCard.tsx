@@ -28,9 +28,11 @@ export const StatCard: React.FC<StatCardProps> = ({ label, value, subValue, colo
   };
 
   const renderTrend = () => {
-    if (!trend) return null;
-    const isZero = Math.abs(trend.value) < 0.1;
-    if (isZero) return <span className="flex items-center gap-1 text-slate-400"><Minus className="w-3 h-3" /> 0%</span>;
+    if (!trend || isNaN(trend.value)) {
+      return <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">Stable</span>;
+    }
+    const isZero = Math.abs(trend.value) < 0.01;
+    if (isZero) return <span className="flex items-center gap-1 text-slate-400 text-[10px] font-black"><Minus className="w-3 h-3" /> 0%</span>;
 
     const isPositive = trend.value > 0;
     const Icon = isPositive ? ArrowUpRight : ArrowDownRight;
