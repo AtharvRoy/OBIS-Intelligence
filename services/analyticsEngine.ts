@@ -21,7 +21,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     const sortedByEfficiency = [...menuItems].sort((a, b) => (a.cost/a.price) - (b.cost/b.price));
     
     bestItem = sortedByProfit[0];
-    worstItem = sortedByEfficiency[sortedByEfficiency.length - 1]; // Highest cost-to-price ratio
+    worstItem = sortedByEfficiency[sortedByEfficiency.length - 1];
   }
 
   // Metadata Classification
@@ -63,7 +63,14 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     };
   }
 
-  // Narrative Assembly
+  // ATTENTION SCORE (Priority Metric)
+  // Weighted calculation based on risk, data quality, and margin health
+  const attentionScore = Math.min(100, 
+    (100 - currentRecord.dataQualityScore) * 0.4 + 
+    (riskLevel === 'High' ? 40 : riskLevel === 'Medium' ? 15 : 0) + 
+    (Math.abs(deltas?.margin || 0) > 3 ? 20 : 0)
+  );
+
   const narrative = {
     health: `The business is currently operating at a ${level} level. Net margin is ${margin.toFixed(1)}%.`,
     change: bestItem 
@@ -91,6 +98,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     staffCostPct,
     onlineDependencyPct,
     dataQuality: currentRecord.dataQualityScore,
+    attentionScore,
     bestItem,
     worstItem,
     deltas

@@ -19,7 +19,9 @@ export const MOCK_CLIENTS: Client[] = [
     status: 'active',
     startMonth: 'Jan 2024',
     lastUpdatedAt: '2024-03-20T10:00:00Z',
-    insightHistory: []
+    insightHistory: [],
+    // Fix: Added decisionLog property
+    decisionLog: []
   },
   {
     id: 'c2',
@@ -31,7 +33,9 @@ export const MOCK_CLIENTS: Client[] = [
     status: 'pilot',
     startMonth: 'Feb 2024',
     lastUpdatedAt: '2024-03-18T14:30:00Z',
-    insightHistory: []
+    insightHistory: [],
+    // Fix: Added decisionLog property
+    decisionLog: []
   }
 ];
 

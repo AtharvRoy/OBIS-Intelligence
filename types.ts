@@ -2,6 +2,7 @@
 export type ClientStatus = 'pilot' | 'active' | 'paused' | 'inactive';
 export type RiskLevel = 'Low' | 'Medium' | 'High';
 export type PerformanceBandLevel = 'Healthy' | 'Weak' | 'Dangerous';
+export type DecisionStatus = 'Accepted' | 'Modified' | 'Rejected' | 'Pending';
 
 export interface PerformanceMetadata {
   level: PerformanceBandLevel;
@@ -12,6 +13,15 @@ export interface PerformanceMetadata {
     change: string;
     action: string;
   };
+}
+
+export interface DecisionLogEntry {
+  id: string;
+  recommendation: string;
+  status: DecisionStatus;
+  notes: string;
+  timestamp: string;
+  targetMonth: string;
 }
 
 export interface InsightHistoryItem {
@@ -32,6 +42,7 @@ export interface Client {
   startMonth: string;
   lastUpdatedAt: string;
   insightHistory: InsightHistoryItem[];
+  decisionLog: DecisionLogEntry[]; // Traceability
 }
 
 export interface MenuItem {
@@ -63,7 +74,7 @@ export interface MonthlyRecord {
     discounts: number;
   };
   topItems: string[];
-  menuItems?: MenuItem[]; // New granular tracking
+  menuItems?: MenuItem[];
   dataQualityScore: number;
 }
 
@@ -78,6 +89,7 @@ export interface BusinessSummary {
   staffCostPct: number;
   onlineDependencyPct: number;
   dataQuality: number;
+  attentionScore: number; // New Priority Metric
   bestItem?: MenuItem;
   worstItem?: MenuItem;
   deltas?: {
@@ -114,5 +126,7 @@ export interface AiInsight {
   importance: string;
   recommendation: string;
   impactPotential: string;
+  confidenceScore: number; // 0-100
+  confidenceReason: string;
   promptVersion: string;
 }

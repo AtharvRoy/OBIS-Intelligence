@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Save, ShieldAlert, Sparkles, Info, HelpCircle, Plus, Trash2, UtensilsCrossed } from 'lucide-react';
-import { MenuItem } from '../types';
+import { MenuItem, MonthlyRecord } from '../types';
 
 interface DataInputFormProps {
   onSave: (data: any) => void;
+  initialData?: MonthlyRecord | null;
 }
 
-export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave }) => {
+export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialData }) => {
   const [formData, setFormData] = useState({
     revenue: 0,
     online: 0,
@@ -28,6 +29,27 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave }) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [qualityScore, setQualityScore] = useState(100);
   const [qualityReasons, setQualityReasons] = useState<string[]>([]);
+
+  // Pre-fill data if editing
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        revenue: initialData.revenue.total,
+        online: initialData.revenue.online,
+        orders: initialData.revenue.orders,
+        foodCost: initialData.costs.food,
+        staff: initialData.costs.staff,
+        rent: initialData.costs.rent,
+        utilities: initialData.costs.utilities,
+        marketing: initialData.costs.marketing,
+        packaging: initialData.costs.packaging,
+        discounts: initialData.costs.discounts
+      });
+      if (initialData.menuItems) {
+        setMenuItems(initialData.menuItems);
+      }
+    }
+  }, [initialData]);
 
   useEffect(() => {
     let score = 100;
@@ -70,7 +92,6 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave }) => {
 
   const handleCommit = () => {
     if (validate()) {
-      // Auto-calculate contribution for menu items
       const processedItems: MenuItem[] = menuItems.map((item, idx) => {
         const contribution = ((item.price || 0) - (item.cost || 0)) * (item.sold || 0);
         return {
@@ -80,8 +101,8 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave }) => {
           cost: item.cost || 0,
           sold: item.sold || 0,
           contribution,
-          popularityRank: 0, // Calculated by engine
-          profitRank: 0      // Calculated by engine
+          popularityRank: 0,
+          profitRank: 0
         } as MenuItem;
       });
 
@@ -127,8 +148,8 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave }) => {
               {qualityScore}
             </div>
             <div>
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">Data Integrity</h3>
-              <p className="text-sm font-medium text-slate-500">Higher scores lead to sharper AI profit insights.</p>
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight">{initialData ? 'Refine Snapshot' : 'Data Integrity'}</h3>
+              <p className="text-sm font-medium text-slate-500">{initialData ? 'Update existing costs or prices to re-calculate.' : 'Higher scores lead to sharper AI profit insights.'}</p>
             </div>
           </div>
           <div className="px-5 py-2.5 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-blue-100 flex items-center gap-2">
@@ -204,7 +225,7 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave }) => {
 
         <div className="p-12 bg-slate-900 flex justify-end">
           <button onClick={handleCommit} className="px-16 py-6 bg-blue-600 text-white rounded-[2rem] font-black shadow-2xl hover:bg-blue-700 transition-all flex items-center gap-3 active:scale-95 text-lg">
-            <Save className="w-6 h-6" /> Push to Engine
+            <Save className="w-6 h-6" /> {initialData ? 'Apply Updates' : 'Push to Engine'}
           </button>
         </div>
       </div>
