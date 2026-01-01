@@ -2,20 +2,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { BusinessSummary, AiInsight, InsightHistoryItem } from './types';
 
-// Initialize lazily to prevent hard crashes if API_KEY is missing during boot
-let aiInstance: GoogleGenAI | null = null;
-
-const getAI = () => {
-  if (!aiInstance) {
-    const apiKey = process.env.API_KEY || "";
-    if (!apiKey) {
-      console.warn("OBIS: API_KEY is not defined in the environment. AI generation will fail.");
-    }
-    aiInstance = new GoogleGenAI({ apiKey });
-  }
-  return aiInstance;
-};
-
 const PROMPT_VERSION = "v1.6.0-trust-aware";
 
 export const generateInsights = async (
@@ -23,7 +9,9 @@ export const generateInsights = async (
   topItems: string[],
   history: InsightHistoryItem[] = []
 ): Promise<AiInsight[]> => {
-  const ai = getAI();
+  // Fix: Direct initialization of Gemini client right before use as per guidelines
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   const metrics = {
     netMargin: `${summary.margin.toFixed(1)}%`,
     foodCost: `${summary.foodCostPct.toFixed(1)}%`,
@@ -63,8 +51,9 @@ export const generateInsights = async (
   `;
 
   try {
+    // Fix: Using gemini-3-pro-preview for complex reasoning task as per guidelines
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-pro-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",

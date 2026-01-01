@@ -42,7 +42,9 @@ import {
   Target,
   FileSearch,
   CheckSquare,
-  ListTodo
+  ListTodo,
+  Star,
+  Trash
 } from 'lucide-react';
 import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
@@ -51,7 +53,7 @@ import { MenuIntelligence } from './components/MenuIntelligence';
 import { Client, MonthlyRecord, BusinessSummary, AiInsight, InsightHistoryItem, DecisionLogEntry, DecisionStatus } from './types';
 import { generateInsights } from './geminiService';
 import { runAnalyticsEngine } from './services/analyticsEngine';
-import { MOCK_CLIENTS, MOCK_RECORDS } from './constants';
+import { MOCK_CLIENTS, MOCK_RECORDS, BENCHMARKS } from './constants';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -335,6 +337,21 @@ const App: React.FC = () => {
     );
   }
 
+  // --- PDF REPORT QUADRANT LOGIC ---
+  const menuQuadrants = useMemo(() => {
+    if (!summary?.rankedMenuItems) return { stars: [], puzzles: [], horses: [], dogs: [] };
+    const items = summary.rankedMenuItems;
+    const avgSold = items.reduce((acc, i) => acc + i.sold, 0) / items.length;
+    const avgProfit = items.reduce((acc, i) => acc + (i.contribution / i.sold), 0) / items.length;
+
+    return {
+      stars: items.filter(i => i.sold >= avgSold && (i.contribution / i.sold) >= avgProfit),
+      puzzles: items.filter(i => i.sold < avgSold && (i.contribution / i.sold) >= avgProfit),
+      horses: items.filter(i => i.sold >= avgSold && (i.contribution / i.sold) < avgProfit),
+      dogs: items.filter(i => i.sold < avgSold && (i.contribution / i.sold) < avgProfit)
+    };
+  }, [summary]);
+
   return (
     <div className="min-h-screen flex bg-slate-50">
       <aside className="no-print hidden lg:flex w-80 bg-slate-900 flex-col p-8 transition-all h-screen sticky top-0">
@@ -421,7 +438,6 @@ const App: React.FC = () => {
                   </div>
                 ) : <p className="text-slate-400 font-medium italic">No decisions logged yet.</p>}
               </div>
-              {/* VITAL FIX: Rendering the derived ranked items from summary */}
               {summary.rankedMenuItems && <MenuIntelligence menu={summary.rankedMenuItems} />}
             </div>
           )}
@@ -484,10 +500,10 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* MASSIVELY EXPANDED PDF REPORT CONTAINER */}
+        {/* --- ENHANCED PDF REPORT CONTAINER --- */}
         {summary && activeClient && activeRecord && (
           <div className="print-only fixed inset-0 z-50 bg-white p-12 space-y-12 w-full min-h-screen text-slate-900 overflow-visible">
-            {/* Page 1: Identity & Executive Summary */}
+            {/* PAGE 1: EXECUTIVE IDENTITY */}
             <header className="flex justify-between items-start pb-10 border-b-8 border-slate-900">
               <div className="space-y-4">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded text-[10px] font-black uppercase tracking-widest">OBIS ADVISORY OS v1.6.2 PRO</div>
@@ -521,7 +537,7 @@ const App: React.FC = () => {
               ))}
             </section>
 
-            {/* Dual Health Logic */}
+            {/* DUAL HEALTH LOGIC */}
             <section className="grid grid-cols-2 gap-10">
                <div className={`p-10 border-4 rounded-[4rem] ${summary.financialHealth === 'Healthy' ? 'border-emerald-500 bg-emerald-50' : 'border-rose-500 bg-rose-50'}`}>
                   <h4 className="text-[12px] font-black uppercase text-slate-500 mb-6 tracking-widest">Financial Health Axis</h4>
@@ -535,69 +551,111 @@ const App: React.FC = () => {
                </div>
             </section>
 
-            {/* Cost Audit Section */}
-            <div className="grid grid-cols-2 gap-12">
-              <div className="p-12 border-2 border-slate-200 rounded-[3rem] space-y-10">
-                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-3 border-b-2 border-slate-900 pb-4">
-                  <FileSearch className="w-5 h-5 text-slate-900" /> Deep-Dive Financial Audit
-                </h3>
-                <table className="w-full text-sm">
-                  <thead className="text-[11px] text-slate-400 font-black uppercase border-b-2 border-slate-100">
-                    <tr><th className="text-left pb-4">Expense Segment</th><th className="text-right pb-4">Value</th><th className="text-right pb-4">% Rev</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold">
-                    {[
-                      { name: 'Raw Materials (Food)', val: activeRecord.costs.food },
-                      { name: 'Staff & Labor', val: activeRecord.costs.staff },
-                      { name: 'Occupancy (Rent)', val: activeRecord.costs.rent },
-                      { name: 'Operating Utilities', val: activeRecord.costs.utilities },
-                      { name: 'Marketing/Client Acq', val: activeRecord.costs.marketing },
-                      { name: 'Aggregator Discounts', val: activeRecord.costs.discounts },
-                    ].map((cost, idx) => (
-                      <tr key={idx}><td className="py-4 text-slate-600">{cost.name}</td><td className="py-4 text-right">₹{cost.val.toLocaleString()}</td><td className="py-4 text-right text-slate-900">{((cost.val/summary.revenue)*100).toFixed(1)}%</td></tr>
-                    ))}
-                    <tr className="border-t-4 border-slate-900"><td className="py-5 font-black text-lg">OPERATIONAL BURN</td><td className="py-5 text-right font-black text-lg">₹{summary.costs.toLocaleString()}</td><td className="py-5 text-right font-black text-lg">{((summary.costs/summary.revenue)*100).toFixed(1)}%</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              
-              <div className="space-y-10">
-                 <div className="p-10 bg-slate-950 text-white rounded-[4rem] space-y-8 shadow-2xl">
-                    <h3 className="text-xs font-black uppercase tracking-widest border-b border-white/20 pb-4 flex items-center gap-3"><Zap className="w-4 h-4 text-blue-400" /> Core Margin Driver</h3>
-                    <p className="text-4xl font-black text-blue-400 leading-tight">{summary.performanceBand.driver}</p>
-                    <p className="text-sm font-medium text-slate-400 leading-relaxed italic border-t border-white/10 pt-6">"{summary.performanceBand.narrative.health}"</p>
-                 </div>
-                 
-                 <div className="p-12 border-2 border-slate-100 rounded-[4rem] space-y-8 bg-slate-50">
-                    <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-3 border-b-2 border-slate-900 pb-4"><ListTodo className="w-5 h-5 text-emerald-600" /> 30-Day Tactical Roadmap</h3>
-                    <div className="space-y-6">
-                      {[
-                        { step: "Audit procurement of high-cost items", impact: "High", priority: "Week 1" },
-                        { step: "Review aggregator promo ceiling (8% max)", impact: "Med", priority: "Week 2" },
-                        { step: "Menu re-engineering for low margin items", impact: "High", priority: "Week 3" },
-                        { step: "Staff efficiency vs sales volume audit", impact: "Med", priority: "Week 4" }
-                      ].map((task, i) => (
-                        <div key={i} className="flex justify-between items-center text-xs font-bold border-b border-slate-200 pb-4 last:border-0">
-                          <div className="space-y-1">
-                            <span className="text-slate-800">{task.step}</span>
-                            <div className="flex gap-4 text-[9px] uppercase text-slate-400"><span>Impact: {task.impact}</span> <span>Due: {task.priority}</span></div>
-                          </div>
-                          <div className="w-5 h-5 rounded border-2 border-slate-300" />
+            {/* SECTION: BENCHMARK VISUALS */}
+            <section className="p-12 border-2 border-slate-100 rounded-[4rem] space-y-8 bg-slate-50/50">
+               <h3 className="text-xs font-black uppercase tracking-[0.3em] flex items-center gap-3 border-b-2 border-slate-900 pb-4">
+                  <Activity className="w-5 h-5 text-blue-600" /> Benchmark Comparison Analysis
+               </h3>
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+                  {[
+                    { label: BENCHMARKS.foodCostPct.label, val: summary.foodCostPct, range: BENCHMARKS.foodCostPct.healthy, unit: '%', invert: true },
+                    { label: BENCHMARKS.staffCostPct.label, val: summary.staffCostPct, range: BENCHMARKS.staffCostPct.healthy, unit: '%', invert: true },
+                    { label: BENCHMARKS.netMargin.label, val: summary.margin, range: BENCHMARKS.netMargin.healthy, unit: '%' }
+                  ].map((b, i) => {
+                    const isSafe = b.invert ? b.val <= b.range[1] : b.val >= b.range[0];
+                    return (
+                      <div key={i} className="space-y-4">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{b.label}</p>
+                        <div className="flex items-end gap-2">
+                           <span className={`text-3xl font-black ${isSafe ? 'text-emerald-600' : 'text-rose-600'}`}>{b.val.toFixed(1)}{b.unit}</span>
+                           <span className="text-[9px] font-bold text-slate-400 mb-1">vs {b.range[0]}-{b.range[1]}% Target</span>
                         </div>
-                      ))}
-                    </div>
-                 </div>
-              </div>
-            </div>
+                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                           <div className={`h-full ${isSafe ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(100, (b.val/b.range[1])*100)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+               </div>
+            </section>
 
-            {/* Menu Matrix Section */}
+            {/* SECTION: MENU MATRIX QUADRANTS */}
             <section className="p-12 border-4 border-slate-900 rounded-[5rem] space-y-12">
-              <header className="flex justify-between items-center"><h3 className="text-sm font-black uppercase tracking-[0.3em] flex items-center gap-4"><Target className="w-6 h-6 text-rose-600" /> Menu Performance Portfolio</h3><span className="text-[10px] font-black uppercase text-slate-400">Method: Weighted Profit Contribution Analysis</span></header>
-              <div className="grid grid-cols-3 gap-12">
-                <div className="space-y-6 p-8 bg-emerald-50 rounded-3xl border border-emerald-100"><div className="px-5 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase rounded-full w-fit">Profit Anchor</div><p className="text-4xl font-black text-slate-900 leading-tight">{summary.bestItem?.name || 'N/A'}</p><p className="text-xs font-bold text-emerald-700 mt-2">Yielding ₹{summary.bestItem?.contribution.toLocaleString()} net monthly.</p></div>
-                <div className="space-y-6 p-8 bg-rose-50 rounded-3xl border border-rose-100"><div className="px-5 py-2 bg-rose-600 text-white text-[10px] font-black uppercase rounded-full w-fit">Efficiency Leak</div><p className="text-4xl font-black text-slate-900 leading-tight">{summary.worstItem?.name || 'N/A'}</p><p className="text-xs font-bold text-rose-700 mt-2">Operating at {(summary.worstItem ? (summary.worstItem.cost/summary.worstItem.price)*100 : 0).toFixed(1)}% cost ratio.</p></div>
-                <div className="space-y-6 p-8 bg-slate-900 text-white rounded-3xl"><div className="px-5 py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-full w-fit">Engine Status</div><p className="text-4xl font-black text-white leading-tight uppercase">{summary.performanceBand.level}</p><p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">Decision Confidence: {summary.dataQuality}%</p></div>
-              </div>
+               <header className="flex justify-between items-center">
+                  <h3 className="text-sm font-black uppercase tracking-[0.3em] flex items-center gap-4">
+                     <Target className="w-6 h-6 text-rose-600" /> Menu Performance Matrix
+                  </h3>
+                  <span className="text-[10px] font-black uppercase text-slate-400">Method: Weighted Unit Profitability vs. Order Volume</span>
+               </header>
+               <div className="grid grid-cols-2 gap-6 h-[500px]">
+                  {/* Quadrant Visualizer */}
+                  <div className="grid grid-cols-2 grid-rows-2 gap-4 h-full">
+                     <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 flex flex-col">
+                        <div className="flex items-center gap-2 text-emerald-700 mb-4"><Star className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-widest">Stars (High Vol / High Profit)</span></div>
+                        <div className="flex-1 space-y-2 overflow-hidden">{menuQuadrants.stars.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black p-2 bg-white rounded-xl shadow-sm border border-emerald-200">{it.name}</div>)}</div>
+                     </div>
+                     <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 flex flex-col">
+                        <div className="flex items-center gap-2 text-blue-700 mb-4"><Zap className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-widest">Horses (High Vol / Low Profit)</span></div>
+                        <div className="flex-1 space-y-2 overflow-hidden">{menuQuadrants.horses.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black p-2 bg-white rounded-xl shadow-sm border-blue-200">{it.name}</div>)}</div>
+                     </div>
+                     <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col">
+                        <div className="flex items-center gap-2 text-amber-700 mb-4"><HelpCircle className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-widest">Puzzles (Low Vol / High Profit)</span></div>
+                        <div className="flex-1 space-y-2 overflow-hidden">{menuQuadrants.puzzles.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black p-2 bg-white rounded-xl shadow-sm border-amber-200">{it.name}</div>)}</div>
+                     </div>
+                     <div className="bg-rose-50 p-6 rounded-3xl border border-rose-100 flex flex-col">
+                        <div className="flex items-center gap-2 text-rose-700 mb-4"><Trash className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-widest">Dogs (Low Vol / Low Profit)</span></div>
+                        <div className="flex-1 space-y-2 overflow-hidden">{menuQuadrants.dogs.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black p-2 bg-white rounded-xl shadow-sm border-rose-200">{it.name}</div>)}</div>
+                     </div>
+                  </div>
+                  {/* Core Insight for Menu */}
+                  <div className="p-10 bg-slate-900 text-white rounded-3xl flex flex-col justify-center space-y-8">
+                     <p className="text-xs font-black text-blue-400 uppercase tracking-widest">Strategic Menu Insight</p>
+                     <p className="text-3xl font-black leading-tight">Your menu health is tied to <span className="text-emerald-400">{summary.bestItem?.name}</span> which contributes {((summary.bestItem?.contribution || 0)/summary.revenue*100).toFixed(1)}% to total revenue.</p>
+                     <div className="p-6 bg-white/10 rounded-2xl border border-white/10">
+                        <p className="text-xs font-bold text-slate-400 mb-2 italic">Observation:</p>
+                        <p className="text-sm font-medium leading-relaxed">{summary.performanceBand.narrative.change}</p>
+                     </div>
+                  </div>
+               </div>
+            </section>
+
+            {/* SECTION: EXPANDED STRATEGIC ROADMAP (AI POWERED) */}
+            <section className="page-break-before space-y-12 pt-12">
+               <div className="bg-slate-950 text-white p-16 lg:p-20 rounded-[5rem] shadow-2xl relative overflow-hidden">
+                  <header className="mb-16">
+                     <h3 className="text-[12px] font-black uppercase tracking-[0.4em] text-blue-400 mb-6">30-Day Executive Roadmap</h3>
+                     {/* Fix: Corrected property access to narrative.action for PerformanceMetadata */}
+                     <h2 className="text-6xl font-black tracking-tighter leading-none">{summary.performanceBand.narrative.action}</h2>
+                  </header>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                     {(activeClient.currentInsights && activeClient.currentInsights.length > 0) ? (
+                        activeClient.currentInsights.map((ins, i) => (
+                           <div key={i} className="p-10 bg-white/5 border border-white/10 rounded-[3rem] space-y-6">
+                              <div className="flex justify-between items-start">
+                                 <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Objective 0{i+1}</span>
+                                 <div className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded text-[9px] font-black">CONFIDENCE: {ins.confidenceScore}%</div>
+                              </div>
+                              <h4 className="text-2xl font-black">{ins.observation}</h4>
+                              <p className="text-slate-400 text-sm leading-relaxed font-medium">{ins.recommendation}</p>
+                              <div className="pt-4 border-t border-white/5">
+                                 <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Anticipated Result</p>
+                                 <p className="text-xs font-bold text-emerald-400 mt-1">{ins.impactPotential}</p>
+                              </div>
+                           </div>
+                        ))
+                     ) : (
+                        <div className="col-span-2 p-12 border-2 border-dashed border-white/10 rounded-[3rem] text-center text-slate-500 italic font-bold">
+                           Run AI Strategy Drafting in the terminal to populate dynamic roadmap items.
+                        </div>
+                     )}
+                  </div>
+
+                  <footer className="mt-20 pt-10 border-t border-white/10 flex justify-between items-center text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                     <p>Decision Engine: OBIS Trust-Aware v1.6</p>
+                     <p>Data Confidence: {summary.dataQuality}%</p>
+                  </footer>
+               </div>
             </section>
 
             <footer className="pt-12 flex justify-between items-center text-[10px] font-black text-slate-500 uppercase tracking-widest border-t-4 border-slate-100">
