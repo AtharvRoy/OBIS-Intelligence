@@ -8,6 +8,101 @@ interface DataInputFormProps {
   initialData?: MonthlyRecord | null;
 }
 
+// Format number to Indian system (en-IN)
+const formatIndianNumber = (val: number | string) => {
+  if (val === 0 || val === '0' || val === '') return '';
+  const num = typeof val === 'string' ? parseFloat(val.replace(/,/g, '')) : val;
+  if (isNaN(num)) return '';
+  return num.toLocaleString('en-IN');
+};
+
+// Parse formatted string back to raw number
+const parseRawNumber = (val: string) => {
+  const cleaned = val.replace(/,/g, '');
+  const num = parseInt(cleaned, 10);
+  return isNaN(num) ? 0 : num;
+};
+
+interface FormattedInputProps {
+  label: string;
+  value: number;
+  fieldName: string;
+  onChange: (val: number) => void;
+  prefix?: string;
+  helper?: string;
+  error?: string;
+}
+
+// DEFINED OUTSIDE TO PREVENT RE-MOUNTING AND FOCUS LOSS
+const FormattedInputField: React.FC<FormattedInputProps> = ({ 
+  label, value, onChange, prefix = "₹", helper, error 
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [localValue, setLocalValue] = useState(formatIndianNumber(value));
+
+  // Sync local value when external value changes (e.g. on initial load)
+  useEffect(() => {
+    const formatted = formatIndianNumber(value);
+    if (formatted !== localValue) {
+      setLocalValue(formatted);
+    }
+  }, [value]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const rawValue = input.value.replace(/[^0-9]/g, '');
+    const numValue = rawValue === '' ? 0 : parseInt(rawValue, 10);
+    
+    // Store cursor position to prevent jumping
+    const cursor = input.selectionStart || 0;
+    const oldLength = input.value.length;
+    
+    const formatted = formatIndianNumber(numValue);
+    setLocalValue(formatted);
+    onChange(numValue);
+
+    // Restore cursor position after formatting (if characters added/removed)
+    setTimeout(() => {
+      if (inputRef.current) {
+        const newLength = formatted.length;
+        const diff = newLength - oldLength;
+        inputRef.current.setSelectionRange(cursor + diff, cursor + diff);
+      }
+    }, 0);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-center">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+          {label}
+          {helper && (
+            <div className="relative group/help">
+              <HelpCircle className="w-3 h-3 text-slate-300 cursor-help" />
+              <div className="absolute bottom-full left-0 mb-2 w-48 p-3 bg-slate-900 text-white text-[9px] font-medium leading-relaxed rounded-xl opacity-0 group-hover/help:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
+                {helper}
+              </div>
+            </div>
+          )}
+        </label>
+        {error && <span className="text-[9px] font-black text-rose-500 uppercase flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> {error}</span>}
+      </div>
+      <div className="relative">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">{prefix}</span>
+        <input 
+          ref={inputRef}
+          type="text"
+          inputMode="numeric"
+          value={localValue}
+          placeholder="0"
+          onChange={handleInputChange}
+          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-8 py-4 font-black focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-sm"
+        />
+      </div>
+    </div>
+  );
+};
+
 export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialData }) => {
   const [formData, setFormData] = useState({
     revenue: 0,
@@ -28,22 +123,6 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [qualityScore, setQualityScore] = useState(100);
-  const [qualityReasons, setQualityReasons] = useState<string[]>([]);
-
-  // Format number to Indian system (en-IN)
-  const formatNumber = (val: number | string) => {
-    if (val === 0 || val === '0' || !val) return '';
-    const num = typeof val === 'string' ? parseFloat(val.replace(/,/g, '')) : val;
-    if (isNaN(num)) return '';
-    return num.toLocaleString('en-IN');
-  };
-
-  // Parse formatted string back to raw number
-  const parseNumber = (val: string) => {
-    const cleaned = val.replace(/,/g, '');
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? 0 : num;
-  };
 
   // Pre-fill data if editing
   useEffect(() => {
@@ -68,19 +147,14 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
 
   useEffect(() => {
     let score = 100;
-    let reasons: string[] = [];
-
     if (formData.revenue === 0) {
       score = 0;
-      reasons.push("Total Revenue is required to initiate analysis.");
     } else {
-      if (formData.utilities === 0) { score -= 15; reasons.push("Missing Utilities (Power/Water) inflates your perceived profit."); }
-      if (formData.staff === 0) { score -= 20; reasons.push("Labor costs are high-impact; analysis is incomplete without staffing data."); }
-      if (menuItems.length < 3) { score -= 10; reasons.push("Low item granularity. Add at least 3 menu items for better profit/loss mapping."); }
+      if (formData.utilities === 0) score -= 15;
+      if (formData.staff === 0) score -= 20;
+      if (menuItems.length < 3) score -= 10;
     }
-    
     setQualityScore(Math.max(0, score));
-    setQualityReasons(reasons);
   }, [formData, menuItems]);
 
   const addMenuItem = () => {
@@ -125,58 +199,6 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
     }
   };
 
-  const FormattedInputField = ({ label, value, fieldName, onChange, prefix = "₹", helper }: any) => {
-    const inputRef = useRef<HTMLInputElement>(null);
-    const [displayValue, setDisplayValue] = useState(formatNumber(value));
-
-    // Keep display value in sync with prop updates (e.g. from initialData)
-    useEffect(() => {
-      setDisplayValue(formatNumber(value));
-    }, [value]);
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const rawInput = e.target.value;
-      // Allow only numbers and commas
-      const cleaned = rawInput.replace(/[^0-9]/g, '');
-      const numValue = cleaned === '' ? 0 : parseInt(cleaned, 10);
-      
-      const formatted = formatNumber(numValue);
-      setDisplayValue(formatted);
-      onChange(numValue);
-    };
-
-    return (
-      <div className="space-y-1.5">
-        <div className="flex justify-between items-center">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-            {label}
-            {helper && (
-              <div className="relative group/help">
-                <HelpCircle className="w-3 h-3 text-slate-300 cursor-help" />
-                <div className="absolute bottom-full left-0 mb-2 w-48 p-3 bg-slate-900 text-white text-[9px] font-medium leading-relaxed rounded-xl opacity-0 group-hover/help:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
-                  {helper}
-                </div>
-              </div>
-            )}
-          </label>
-          {errors[fieldName] && <span className="text-[9px] font-black text-rose-500 uppercase flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> {errors[fieldName]}</span>}
-        </div>
-        <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">{prefix}</span>
-          <input 
-            ref={inputRef}
-            type="text"
-            inputMode="numeric"
-            value={displayValue}
-            placeholder="0"
-            onChange={handleInputChange}
-            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-8 py-4 font-black focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-sm"
-          />
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="bg-white rounded-[3rem] border border-slate-200 shadow-sm overflow-hidden">
@@ -200,25 +222,48 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
             <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
               <UtensilsCrossed className="w-4 h-4" /> Financial Aggregates
             </h4>
-            <FormattedInputField label="Total Monthly Revenue" value={formData.revenue} fieldName="revenue" onChange={(v: any) => setFormData({...formData, revenue: v})} />
-            <FormattedInputField label="Zomato/Swiggy Sales" value={formData.online} fieldName="online" onChange={(v: any) => setFormData({...formData, online: v})} />
+            <FormattedInputField 
+              label="Total Monthly Revenue" 
+              value={formData.revenue} 
+              fieldName="revenue" 
+              error={errors.revenue}
+              onChange={(v) => setFormData({...formData, revenue: v})} 
+            />
+            <FormattedInputField 
+              label="Zomato/Swiggy Sales" 
+              value={formData.online} 
+              fieldName="online" 
+              error={errors.online}
+              onChange={(v) => setFormData({...formData, online: v})} 
+            />
             <div className="grid grid-cols-2 gap-6">
-              <FormattedInputField label="Total Orders" value={formData.orders} fieldName="orders" prefix="#" onChange={(v: any) => setFormData({...formData, orders: v})} />
-              <FormattedInputField label="Food Cost (COGS)" value={formData.foodCost} fieldName="foodCost" onChange={(v: any) => setFormData({...formData, foodCost: v})} />
+              <FormattedInputField 
+                label="Total Orders" 
+                value={formData.orders} 
+                fieldName="orders" 
+                prefix="#" 
+                onChange={(v) => setFormData({...formData, orders: v})} 
+              />
+              <FormattedInputField 
+                label="Food Cost (COGS)" 
+                value={formData.foodCost} 
+                fieldName="foodCost" 
+                onChange={(v) => setFormData({...formData, foodCost: v})} 
+              />
             </div>
           </div>
 
           <div className="space-y-8">
             <h4 className="text-[11px] font-black text-rose-500 uppercase tracking-widest">Fixed & Variable Overheads</h4>
             <div className="grid grid-cols-2 gap-6">
-              <FormattedInputField label="Salaries" value={formData.staff} fieldName="staff" onChange={(v: any) => setFormData({...formData, staff: v})} />
-              <FormattedInputField label="Rent/Fixed" value={formData.rent} fieldName="rent" onChange={(v: any) => setFormData({...formData, rent: v})} />
+              <FormattedInputField label="Salaries" value={formData.staff} fieldName="staff" onChange={(v) => setFormData({...formData, staff: v})} />
+              <FormattedInputField label="Rent/Fixed" value={formData.rent} fieldName="rent" onChange={(v) => setFormData({...formData, rent: v})} />
             </div>
             <div className="grid grid-cols-2 gap-6">
-              <FormattedInputField label="Utilities" value={formData.utilities} fieldName="utilities" onChange={(v: any) => setFormData({...formData, utilities: v})} />
-              <FormattedInputField label="Marketing" value={formData.marketing} fieldName="marketing" onChange={(v: any) => setFormData({...formData, marketing: v})} />
+              <FormattedInputField label="Utilities" value={formData.utilities} fieldName="utilities" onChange={(v) => setFormData({...formData, utilities: v})} />
+              <FormattedInputField label="Marketing" value={formData.marketing} fieldName="marketing" onChange={(v) => setFormData({...formData, marketing: v})} />
             </div>
-            <FormattedInputField label="Packaging & Disposables" value={formData.packaging} fieldName="packaging" onChange={(v: any) => setFormData({...formData, packaging: v})} />
+            <FormattedInputField label="Packaging & Disposables" value={formData.packaging} fieldName="packaging" onChange={(v) => setFormData({...formData, packaging: v})} />
           </div>
         </div>
 
@@ -243,8 +288,8 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
                   <label className="text-[9px] font-black uppercase text-slate-400">Sell Price (₹)</label>
                   <input 
                     type="text" 
-                    value={formatNumber(item.price || 0)} 
-                    onChange={(e) => updateMenuItem(idx, 'price', parseNumber(e.target.value))} 
+                    value={formatIndianNumber(item.price || 0)} 
+                    onChange={(e) => updateMenuItem(idx, 'price', parseRawNumber(e.target.value))} 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-xs outline-none" 
                   />
                 </div>
@@ -252,8 +297,8 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
                   <label className="text-[9px] font-black uppercase text-slate-400">Prep Cost (₹)</label>
                   <input 
                     type="text" 
-                    value={formatNumber(item.cost || 0)} 
-                    onChange={(e) => updateMenuItem(idx, 'cost', parseNumber(e.target.value))} 
+                    value={formatIndianNumber(item.cost || 0)} 
+                    onChange={(e) => updateMenuItem(idx, 'cost', parseRawNumber(e.target.value))} 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-xs outline-none" 
                   />
                 </div>
@@ -261,8 +306,8 @@ export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialDat
                   <label className="text-[9px] font-black uppercase text-slate-400">Units Sold</label>
                   <input 
                     type="text" 
-                    value={formatNumber(item.sold || 0)} 
-                    onChange={(e) => updateMenuItem(idx, 'sold', parseNumber(e.target.value))} 
+                    value={formatIndianNumber(item.sold || 0)} 
+                    onChange={(e) => updateMenuItem(idx, 'sold', parseRawNumber(e.target.value))} 
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-xs outline-none" 
                   />
                 </div>
