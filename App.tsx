@@ -120,7 +120,12 @@ const App: React.FC = () => {
 
   const summary: BusinessSummary | null = useMemo(() => {
     if (!activeRecord) return null;
-    return runAnalyticsEngine(activeRecord, previousRecord);
+    try {
+      return runAnalyticsEngine(activeRecord, previousRecord);
+    } catch (err) {
+      console.error("Engine failure:", err);
+      return null;
+    }
   }, [activeRecord, previousRecord]);
 
   const portfolioStats = useMemo(() => {
@@ -128,27 +133,36 @@ const App: React.FC = () => {
       const clientRecs = records[client.id] || [];
       const current = clientRecs[0];
       const previous = clientRecs[1];
-      const eng = current ? runAnalyticsEngine(current, previous) : null;
+      let eng = null;
+      try {
+        eng = current ? runAnalyticsEngine(current, previous) : null;
+      } catch (e) {}
+      
       const isStale = (Date.now() - new Date(client.lastUpdatedAt).getTime()) > 1000 * 60 * 60 * 24 * 7;
-      const score = eng ? eng.attentionScore + (isStale ? 20 : 0) : 100;
-      return { client, score, status: eng?.performanceBand.level || 'Healthy', risk: eng?.riskLevel || 'Low' };
+      const score = eng ? (eng.attentionScore || 0) + (isStale ? 20 : 0) : 100;
+      return { 
+        client, 
+        score, 
+        status: eng?.performanceBand?.level || 'Healthy', 
+        risk: eng?.riskLevel || 'Low' 
+      };
     }).sort((a, b) => b.score - a.score);
   }, [clients, records]);
 
   const dashboardData = useMemo(() => {
     if (!activeRecord) return null;
     const revenue = [
-      { channel: 'Online', gross: activeRecord.revenue.online, net: activeRecord.revenue.online * 0.72 },
-      { channel: 'Offline', gross: activeRecord.revenue.offline, net: activeRecord.revenue.offline * 0.95 }
+      { channel: 'Online', gross: Number(activeRecord.revenue?.online) || 0, net: (Number(activeRecord.revenue?.online) || 0) * 0.72 },
+      { channel: 'Offline', gross: Number(activeRecord.revenue?.offline) || 0, net: (Number(activeRecord.revenue?.offline) || 0) * 0.95 }
     ];
     const costs = [
-      { name: 'Food', value: activeRecord.costs.food },
-      { name: 'Staff', value: activeRecord.costs.staff },
-      { name: 'Rent', value: activeRecord.costs.rent },
-      { name: 'Marketing', value: activeRecord.costs.marketing },
-      { name: 'Packaging', value: activeRecord.costs.packaging },
-      { name: 'Utilities', value: activeRecord.costs.utilities },
-      { name: 'Discounts', value: activeRecord.costs.discounts }
+      { name: 'Food', value: Number(activeRecord.costs?.food) || 0 },
+      { name: 'Staff', value: Number(activeRecord.costs?.staff) || 0 },
+      { name: 'Rent', value: Number(activeRecord.costs?.rent) || 0 },
+      { name: 'Marketing', value: Number(activeRecord.costs?.marketing) || 0 },
+      { name: 'Packaging', value: Number(activeRecord.costs?.packaging) || 0 },
+      { name: 'Utilities', value: Number(activeRecord.costs?.utilities) || 0 },
+      { name: 'Discounts', value: Number(activeRecord.costs?.discounts) || 0 }
     ];
     return { revenue, costs };
   }, [activeRecord]);
@@ -225,19 +239,18 @@ const App: React.FC = () => {
   const handleSaveData = (data: any) => {
     if (!selectedClientId) return;
     
-    // One single point of entry for normalization
     const newRecord: MonthlyRecord = {
       clientId: selectedClientId,
       month: activeRecord?.month || new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
       revenue: {
-        total: Number(data.revenue),
-        online: Number(data.online),
-        offline: Number(data.revenue) - Number(data.online),
+        total: Number(data.revenue) || 0,
+        online: Number(data.online) || 0,
+        offline: (Number(data.revenue) || 0) - (Number(data.online) || 0),
         orders: Number(data.orders) || 0
       },
       costs: {
-        food: Number(data.foodCost),
-        staff: Number(data.staff),
+        food: Number(data.foodCost) || 0,
+        staff: Number(data.staff) || 0,
         rent: Number(data.rent) || 0,
         utilities: Number(data.utilities) || 0,
         marketing: Number(data.marketing) || 0,
@@ -245,13 +258,13 @@ const App: React.FC = () => {
         discounts: Number(data.discounts) || 0
       },
       topItems: data.menuItems?.slice(0, 3).map((i: any) => i.name) || [],
-      menuItems: data.menuItems?.map((i: any) => ({
+      menuItems: (data.menuItems || []).map((i: any) => ({
         ...i,
-        price: Number(i.price),
-        cost: Number(i.cost),
-        sold: Number(i.sold)
+        price: Number(i.price) || 0,
+        cost: Number(i.cost) || 0,
+        sold: Number(i.sold) || 0
       })),
-      dataQualityScore: Number(data.dataQualityScore)
+      dataQualityScore: Number(data.dataQualityScore) || 100
     };
 
     setRecords(prev => ({ 
@@ -324,7 +337,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <h3 className="text-3xl font-black text-slate-900 mb-2 leading-tight">{client.name}</h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-10">{client.cuisine} • {client.city}</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-10">{client.cuisine || 'Cuisine'} • {client.city || 'Location'}</p>
                 <div className="grid grid-cols-2 gap-8 border-t border-slate-50 pt-8">
                   <div><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Decisions</p><p className="font-black text-slate-700">{client.decisionLog?.length || 0} Tracked</p></div>
                   <div><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Risk Level</p><p className={`font-black ${risk === 'High' ? 'text-rose-600' : 'text-slate-700'}`}>{risk}</p></div>
@@ -339,16 +352,16 @@ const App: React.FC = () => {
 
   // --- PDF REPORT QUADRANT LOGIC ---
   const menuQuadrants = useMemo(() => {
-    if (!summary?.rankedMenuItems) return { stars: [], puzzles: [], horses: [], dogs: [] };
+    if (!summary?.rankedMenuItems || summary.rankedMenuItems.length === 0) return { stars: [], puzzles: [], horses: [], dogs: [] };
     const items = summary.rankedMenuItems;
-    const avgSold = items.reduce((acc, i) => acc + i.sold, 0) / items.length;
-    const avgProfit = items.reduce((acc, i) => acc + (i.contribution / i.sold), 0) / items.length;
+    const avgSold = items.reduce((acc, i) => acc + (i.sold || 0), 0) / items.length;
+    const avgProfit = items.reduce((acc, i) => acc + ((i.contribution || 0) / Math.max(1, i.sold || 0)), 0) / items.length;
 
     return {
-      stars: items.filter(i => i.sold >= avgSold && (i.contribution / i.sold) >= avgProfit),
-      puzzles: items.filter(i => i.sold < avgSold && (i.contribution / i.sold) >= avgProfit),
-      horses: items.filter(i => i.sold >= avgSold && (i.contribution / i.sold) < avgProfit),
-      dogs: items.filter(i => i.sold < avgSold && (i.contribution / i.sold) < avgProfit)
+      stars: items.filter(i => (i.sold || 0) >= avgSold && ((i.contribution || 0) / Math.max(1, i.sold || 0)) >= avgProfit),
+      puzzles: items.filter(i => (i.sold || 0) < avgSold && ((i.contribution || 0) / Math.max(1, i.sold || 0)) >= avgProfit),
+      horses: items.filter(i => (i.sold || 0) >= avgSold && ((i.contribution || 0) / Math.max(1, i.sold || 0)) < avgProfit),
+      dogs: items.filter(i => (i.sold || 0) < avgSold && ((i.contribution || 0) / Math.max(1, i.sold || 0)) < avgProfit)
     };
   }, [summary]);
 
@@ -359,9 +372,9 @@ const App: React.FC = () => {
           <ArrowLeft className="w-5 h-5" /> Back to Portfolio
         </button>
         <div className="mb-12 px-2">
-          <h2 className="text-2xl font-black text-white mb-2 leading-tight">{activeClient?.name}</h2>
+          <h2 className="text-2xl font-black text-white mb-2 leading-tight">{activeClient?.name || 'Loading...'}</h2>
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${summary?.performanceBand.level === 'Healthy' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+            <span className={`w-2 h-2 rounded-full ${summary?.performanceBand?.level === 'Healthy' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
             <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Advisory Feed Active</p>
           </div>
         </div>
@@ -402,21 +415,21 @@ const App: React.FC = () => {
 
         <div className="p-10 lg:p-14 max-w-6xl mx-auto w-full pb-24 no-print">
           {activeTab === 'input' && <DataInputForm onSave={handleSaveData} initialData={activeRecord} />}
+          
           {activeTab === 'analysis' && summary && dashboardData && (
             <div className="space-y-16 animate-in fade-in duration-500">
               {!meetingMode && <Dashboard summary={summary} revenue={dashboardData.revenue} costs={dashboardData.costs} />}
               <AnalystConsole summary={summary} meetingMode={meetingMode} />
               
-              {/* Dual-Axis Health Visualizer */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className={`p-8 rounded-[3rem] border border-slate-200 shadow-sm ${summary.financialHealth === 'Healthy' ? 'bg-emerald-50' : summary.financialHealth === 'Weak' ? 'bg-amber-50' : 'bg-rose-50'}`}>
                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Financial Health (Margins)</h4>
-                   <p className="text-3xl font-black">{summary.financialHealth}</p>
+                   <p className="text-3xl font-black">{summary.financialHealth || 'Unknown'}</p>
                    <p className="text-xs font-medium text-slate-500 mt-2">Based on current net profitability bands.</p>
                 </div>
                 <div className={`p-8 rounded-[3rem] border border-slate-200 shadow-sm ${summary.structuralResilience === 'Healthy' ? 'bg-emerald-50' : summary.structuralResilience === 'Weak' ? 'bg-amber-50' : 'bg-rose-50'}`}>
                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Structural Resilience (Ops)</h4>
-                   <p className="text-3xl font-black">{summary.structuralResilience}</p>
+                   <p className="text-3xl font-black">{summary.structuralResilience || 'Unknown'}</p>
                    <p className="text-xs font-medium text-slate-500 mt-2">Based on cost efficiency and data fidelity.</p>
                 </div>
               </div>
@@ -438,7 +451,15 @@ const App: React.FC = () => {
                   </div>
                 ) : <p className="text-slate-400 font-medium italic">No decisions logged yet.</p>}
               </div>
+              
               {summary.rankedMenuItems && <MenuIntelligence menu={summary.rankedMenuItems} />}
+            </div>
+          )}
+          
+          {activeTab === 'analysis' && (!summary || !dashboardData) && (
+            <div className="bg-white p-20 rounded-[4rem] text-center border-2 border-dashed border-slate-200">
+              <RefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-6" />
+              <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Initializing Analysis Engine...</p>
             </div>
           )}
           
@@ -448,7 +469,7 @@ const App: React.FC = () => {
                 <div className="relative z-10 max-w-2xl">
                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-black uppercase tracking-[0.2em] mb-6"><Sparkles className="w-3 h-3" /> OBIS Trust-Engine v1.6</div>
                   <h3 className="text-6xl font-black mb-6 leading-tight tracking-tighter">Strategic Drafting</h3>
-                  <p className="text-slate-400 mb-10 text-xl font-medium leading-relaxed">AI drafting requires human verification. Ensure your <code>API_KEY</code> is correctly set in your environment if running locally.</p>
+                  <p className="text-slate-400 mb-10 text-xl font-medium leading-relaxed">AI drafting requires human verification. Decision models use current snapshot data.</p>
                   <button onClick={handleFetchAiInsights} disabled={loadingInsights} className="px-12 py-5 bg-blue-600 hover:bg-blue-700 rounded-3xl font-black transition-all shadow-2xl disabled:opacity-50 active:scale-95 text-lg flex items-center gap-3">
                     {loadingInsights ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
                     {loadingInsights ? 'Analyzing Reliability...' : activeClient?.currentInsights?.length ? 'Regenerate Insights' : 'Generate Verified Insights'}
@@ -493,39 +514,38 @@ const App: React.FC = () => {
               <div className="no-print flex flex-col items-center justify-center py-32 bg-white rounded-[4rem] border border-slate-200 text-center shadow-sm">
                 <div className="w-24 h-24 bg-blue-50 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-2xl shadow-blue-100"><FileText className="w-10 h-10 text-blue-600" /></div>
                 <h3 className="text-4xl font-black text-slate-900 mb-4 tracking-tighter">Executive Intelligence Report</h3>
-                <p className="text-slate-500 mb-10 max-w-sm font-medium leading-relaxed">High-fidelity 5-page PDF for client meetings. Includes health bands, audit logs, and strategic roadmap.</p>
+                <p className="text-slate-500 mb-10 max-w-sm font-medium leading-relaxed">High-fidelity PDF for client meetings. Includes health bands, audit logs, and strategic roadmap.</p>
                 <button onClick={handlePrint} className="px-12 py-5 bg-slate-900 text-white rounded-2xl font-black shadow-2xl hover:bg-black transition-all flex items-center gap-3"><Download className="w-5 h-5" /> Download Report PDF</button>
               </div>
             </div>
           )}
         </div>
 
-        {/* --- ENHANCED PDF REPORT CONTAINER --- */}
+        {/* --- DEFENSIVE PDF REPORT CONTAINER --- */}
         {summary && activeClient && activeRecord && (
           <div className="print-only fixed inset-0 z-50 bg-white p-12 space-y-12 w-full min-h-screen text-slate-900 overflow-visible">
             {/* PAGE 1: EXECUTIVE IDENTITY */}
             <header className="flex justify-between items-start pb-10 border-b-8 border-slate-900">
               <div className="space-y-4">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded text-[10px] font-black uppercase tracking-widest">OBIS ADVISORY OS v1.6.2 PRO</div>
-                <h1 className="text-7xl font-black tracking-tighter uppercase leading-none">{activeClient.name}</h1>
+                <h1 className="text-7xl font-black tracking-tighter uppercase leading-none">{activeClient.name || 'CLIENT'}</h1>
                 <div className="flex gap-6">
-                  <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Market: {activeClient.city.toUpperCase()}</p>
-                  <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Cuisine: {activeClient.cuisine.toUpperCase()}</p>
-                  <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Reporting Cycle: {activeRecord.month}</p>
+                  <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Market: {(activeClient.city || 'Unknown').toUpperCase()}</p>
+                  <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Reporting Cycle: {activeRecord.month || 'SNAPSHOT'}</p>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-3 text-right">
                 <div className="w-24 h-24 bg-slate-900 text-white flex items-center justify-center rounded-3xl font-black text-5xl italic shadow-2xl">O</div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">Terminal Ref: {activeClient.id.toUpperCase()}<br/>{new Date().toLocaleDateString()}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">Terminal Ref: {(activeClient.id || 'ID').toUpperCase()}<br/>{new Date().toLocaleDateString()}</p>
               </div>
             </header>
 
             <section className="grid grid-cols-4 gap-8">
               {[
-                { label: 'Yield Potential', val: `₹${(summary.revenue/100000).toFixed(2)}L`, color: 'text-slate-900', meta: 'Gross Rev' },
-                { label: 'Bottom Line', val: `₹${(summary.netProfit/100000).toFixed(2)}L`, color: summary.netProfit > 0 ? 'text-emerald-600' : 'text-rose-600', meta: 'Actual Net' },
-                { label: 'Margin Efficiency', val: `${summary.margin.toFixed(1)}%`, color: summary.margin > 18 ? 'text-emerald-600' : 'text-rose-600', meta: 'Profit Margin' },
-                { label: 'Intervention Req.', val: `${summary.attentionScore.toFixed(0)}%`, color: summary.attentionScore > 60 ? 'text-rose-600' : 'text-slate-900', meta: 'Risk Signal' }
+                { label: 'Yield Potential', val: `₹${((summary.revenue || 0)/100000).toFixed(2)}L`, color: 'text-slate-900', meta: 'Gross Rev' },
+                { label: 'Bottom Line', val: `₹${((summary.netProfit || 0)/100000).toFixed(2)}L`, color: (summary.netProfit || 0) > 0 ? 'text-emerald-600' : 'text-rose-600', meta: 'Actual Net' },
+                { label: 'Margin Efficiency', val: `${(summary.margin || 0).toFixed(1)}%`, color: (summary.margin || 0) > 18 ? 'text-emerald-600' : 'text-rose-600', meta: 'Profit Margin' },
+                { label: 'Intervention Req.', val: `${(summary.attentionScore || 0).toFixed(0)}%`, color: (summary.attentionScore || 0) > 60 ? 'text-rose-600' : 'text-slate-900', meta: 'Risk Signal' }
               ].map((stat, i) => (
                 <div key={i} className="p-10 bg-slate-50 border-2 border-slate-200 rounded-[2.5rem] flex flex-col justify-between shadow-sm">
                   <div>
@@ -537,45 +557,14 @@ const App: React.FC = () => {
               ))}
             </section>
 
-            {/* DUAL HEALTH LOGIC */}
             <section className="grid grid-cols-2 gap-10">
-               <div className={`p-10 border-4 rounded-[4rem] ${summary.financialHealth === 'Healthy' ? 'border-emerald-500 bg-emerald-50' : 'border-rose-500 bg-rose-50'}`}>
+               <div className={`p-10 border-4 rounded-[4rem] ${(summary.financialHealth || 'Healthy') === 'Healthy' ? 'border-emerald-500 bg-emerald-50' : 'border-rose-500 bg-rose-50'}`}>
                   <h4 className="text-[12px] font-black uppercase text-slate-500 mb-6 tracking-widest">Financial Health Axis</h4>
-                  <p className="text-6xl font-black text-slate-900 tracking-tighter uppercase">{summary.financialHealth}</p>
-                  <p className="text-sm font-bold text-slate-600 mt-4 leading-relaxed">Profitability is currently sitting at {summary.margin.toFixed(1)}%, which is considered {summary.financialHealth.toLowerCase()} for this sector.</p>
+                  <p className="text-6xl font-black text-slate-900 tracking-tighter uppercase">{summary.financialHealth || 'Unknown'}</p>
                </div>
-               <div className={`p-10 border-4 rounded-[4rem] ${summary.structuralResilience === 'Healthy' ? 'border-emerald-500 bg-emerald-50' : 'border-rose-500 bg-rose-50'}`}>
+               <div className={`p-10 border-4 rounded-[4rem] ${(summary.structuralResilience || 'Healthy') === 'Healthy' ? 'border-emerald-500 bg-emerald-50' : 'border-rose-500 bg-rose-50'}`}>
                   <h4 className="text-[12px] font-black uppercase text-slate-500 mb-6 tracking-widest">Structural Resilience Axis</h4>
-                  <p className="text-6xl font-black text-slate-900 tracking-tighter uppercase">{summary.structuralResilience}</p>
-                  <p className="text-sm font-bold text-slate-600 mt-4 leading-relaxed">Based on {summary.onlineDependencyPct.toFixed(0)}% platform dependency and {summary.foodCostPct.toFixed(1)}% COGS burn.</p>
-               </div>
-            </section>
-
-            {/* SECTION: BENCHMARK VISUALS */}
-            <section className="p-12 border-2 border-slate-100 rounded-[4rem] space-y-8 bg-slate-50/50">
-               <h3 className="text-xs font-black uppercase tracking-[0.3em] flex items-center gap-3 border-b-2 border-slate-900 pb-4">
-                  <Activity className="w-5 h-5 text-blue-600" /> Benchmark Comparison Analysis
-               </h3>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-                  {[
-                    { label: BENCHMARKS.foodCostPct.label, val: summary.foodCostPct, range: BENCHMARKS.foodCostPct.healthy, unit: '%', invert: true },
-                    { label: BENCHMARKS.staffCostPct.label, val: summary.staffCostPct, range: BENCHMARKS.staffCostPct.healthy, unit: '%', invert: true },
-                    { label: BENCHMARKS.netMargin.label, val: summary.margin, range: BENCHMARKS.netMargin.healthy, unit: '%' }
-                  ].map((b, i) => {
-                    const isSafe = b.invert ? b.val <= b.range[1] : b.val >= b.range[0];
-                    return (
-                      <div key={i} className="space-y-4">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{b.label}</p>
-                        <div className="flex items-end gap-2">
-                           <span className={`text-3xl font-black ${isSafe ? 'text-emerald-600' : 'text-rose-600'}`}>{b.val.toFixed(1)}{b.unit}</span>
-                           <span className="text-[9px] font-bold text-slate-400 mb-1">vs {b.range[0]}-{b.range[1]}% Target</span>
-                        </div>
-                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                           <div className={`h-full ${isSafe ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(100, (b.val/b.range[1])*100)}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <p className="text-6xl font-black text-slate-900 tracking-tighter uppercase">{summary.structuralResilience || 'Unknown'}</p>
                </div>
             </section>
 
@@ -585,63 +574,47 @@ const App: React.FC = () => {
                   <h3 className="text-sm font-black uppercase tracking-[0.3em] flex items-center gap-4">
                      <Target className="w-6 h-6 text-rose-600" /> Menu Performance Matrix
                   </h3>
-                  <span className="text-[10px] font-black uppercase text-slate-400">Method: Weighted Unit Profitability vs. Order Volume</span>
                </header>
-               <div className="grid grid-cols-2 gap-6 h-[500px]">
-                  {/* Quadrant Visualizer */}
+               <div className="grid grid-cols-2 gap-6 h-[400px]">
                   <div className="grid grid-cols-2 grid-rows-2 gap-4 h-full">
-                     <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 flex flex-col">
-                        <div className="flex items-center gap-2 text-emerald-700 mb-4"><Star className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-widest">Stars (High Vol / High Profit)</span></div>
-                        <div className="flex-1 space-y-2 overflow-hidden">{menuQuadrants.stars.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black p-2 bg-white rounded-xl shadow-sm border border-emerald-200">{it.name}</div>)}</div>
+                     <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
+                        <span className="text-[9px] font-black uppercase text-emerald-700 tracking-widest">Stars</span>
+                        <div className="mt-2 space-y-1">{menuQuadrants.stars?.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black truncate">{it.name}</div>)}</div>
                      </div>
-                     <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 flex flex-col">
-                        <div className="flex items-center gap-2 text-blue-700 mb-4"><Zap className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-widest">Horses (High Vol / Low Profit)</span></div>
-                        <div className="flex-1 space-y-2 overflow-hidden">{menuQuadrants.horses.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black p-2 bg-white rounded-xl shadow-sm border-blue-200">{it.name}</div>)}</div>
+                     <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
+                        <span className="text-[9px] font-black uppercase text-blue-700 tracking-widest">Horses</span>
+                        <div className="mt-2 space-y-1">{menuQuadrants.horses?.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black truncate">{it.name}</div>)}</div>
                      </div>
-                     <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col">
-                        <div className="flex items-center gap-2 text-amber-700 mb-4"><HelpCircle className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-widest">Puzzles (Low Vol / High Profit)</span></div>
-                        <div className="flex-1 space-y-2 overflow-hidden">{menuQuadrants.puzzles.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black p-2 bg-white rounded-xl shadow-sm border-amber-200">{it.name}</div>)}</div>
+                     <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100">
+                        <span className="text-[9px] font-black uppercase text-amber-700 tracking-widest">Puzzles</span>
+                        <div className="mt-2 space-y-1">{menuQuadrants.puzzles?.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black truncate">{it.name}</div>)}</div>
                      </div>
-                     <div className="bg-rose-50 p-6 rounded-3xl border border-rose-100 flex flex-col">
-                        <div className="flex items-center gap-2 text-rose-700 mb-4"><Trash className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-widest">Dogs (Low Vol / Low Profit)</span></div>
-                        <div className="flex-1 space-y-2 overflow-hidden">{menuQuadrants.dogs.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black p-2 bg-white rounded-xl shadow-sm border-rose-200">{it.name}</div>)}</div>
+                     <div className="bg-rose-50 p-6 rounded-3xl border border-rose-100">
+                        <span className="text-[9px] font-black uppercase text-rose-700 tracking-widest">Dogs</span>
+                        <div className="mt-2 space-y-1">{menuQuadrants.dogs?.slice(0, 3).map((it, idx) => <div key={idx} className="text-xs font-black truncate">{it.name}</div>)}</div>
                      </div>
                   </div>
-                  {/* Core Insight for Menu */}
-                  <div className="p-10 bg-slate-900 text-white rounded-3xl flex flex-col justify-center space-y-8">
-                     <p className="text-xs font-black text-blue-400 uppercase tracking-widest">Strategic Menu Insight</p>
-                     <p className="text-3xl font-black leading-tight">Your menu health is tied to <span className="text-emerald-400">{summary.bestItem?.name}</span> which contributes {((summary.bestItem?.contribution || 0)/summary.revenue*100).toFixed(1)}% to total revenue.</p>
-                     <div className="p-6 bg-white/10 rounded-2xl border border-white/10">
-                        <p className="text-xs font-bold text-slate-400 mb-2 italic">Observation:</p>
-                        <p className="text-sm font-medium leading-relaxed">{summary.performanceBand.narrative.change}</p>
-                     </div>
+                  <div className="p-10 bg-slate-900 text-white rounded-3xl flex flex-col justify-center">
+                     <p className="text-3xl font-black leading-tight">Menu health tied to <span className="text-emerald-400">{summary.bestItem?.name || 'Top Performance'}</span>.</p>
+                     <p className="text-sm font-medium text-slate-400 mt-4 leading-relaxed italic">"{summary.performanceBand?.narrative?.change || 'Scanning operations...'}"</p>
                   </div>
                </div>
             </section>
 
-            {/* SECTION: EXPANDED STRATEGIC ROADMAP (AI POWERED) */}
-            <section className="page-break-before space-y-12 pt-12">
-               <div className="bg-slate-950 text-white p-16 lg:p-20 rounded-[5rem] shadow-2xl relative overflow-hidden">
+            {/* SECTION: EXECUTIVE ROADMAP */}
+            <section className="space-y-12 pt-12">
+               <div className="bg-slate-950 text-white p-16 lg:p-20 rounded-[5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)]">
                   <header className="mb-16">
                      <h3 className="text-[12px] font-black uppercase tracking-[0.4em] text-blue-400 mb-6">30-Day Executive Roadmap</h3>
-                     {/* Fix: Corrected property access to narrative.action for PerformanceMetadata */}
-                     <h2 className="text-6xl font-black tracking-tighter leading-none">{summary.performanceBand.narrative.action}</h2>
+                     <h2 className="text-6xl font-black tracking-tighter leading-none">{summary.performanceBand?.narrative?.action || 'Optimization Active'}</h2>
                   </header>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                      {(activeClient.currentInsights && activeClient.currentInsights.length > 0) ? (
                         activeClient.currentInsights.map((ins, i) => (
-                           <div key={i} className="p-10 bg-white/5 border border-white/10 rounded-[3rem] space-y-6">
-                              <div className="flex justify-between items-start">
-                                 <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Objective 0{i+1}</span>
-                                 <div className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded text-[9px] font-black">CONFIDENCE: {ins.confidenceScore}%</div>
-                              </div>
+                           <div key={i} className="p-10 bg-white/5 border border-white/10 rounded-[3rem] space-y-4">
                               <h4 className="text-2xl font-black">{ins.observation}</h4>
                               <p className="text-slate-400 text-sm leading-relaxed font-medium">{ins.recommendation}</p>
-                              <div className="pt-4 border-t border-white/5">
-                                 <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Anticipated Result</p>
-                                 <p className="text-xs font-bold text-emerald-400 mt-1">{ins.impactPotential}</p>
-                              </div>
                            </div>
                         ))
                      ) : (
@@ -650,11 +623,6 @@ const App: React.FC = () => {
                         </div>
                      )}
                   </div>
-
-                  <footer className="mt-20 pt-10 border-t border-white/10 flex justify-between items-center text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                     <p>Decision Engine: OBIS Trust-Aware v1.6</p>
-                     <p>Data Confidence: {summary.dataQuality}%</p>
-                  </footer>
                </div>
             </section>
 
@@ -662,9 +630,8 @@ const App: React.FC = () => {
               <div className="flex gap-12">
                 <p>© OBIS ADVISORY 2026</p>
                 <p>INTEGRITY AUDIT: PASS</p>
-                <p>REPORT ID: OBIS-{activeClient.id.toUpperCase()}-{activeRecord.month.toUpperCase().replace(' ','')}</p>
               </div>
-              <p>CONFIDENTIAL EXECUTIVE SUMMARY - DO NOT DISTRIBUTE</p>
+              <p>CONFIDENTIAL EXECUTIVE SUMMARY</p>
             </footer>
           </div>
         )}

@@ -2,25 +2,39 @@
 import { MonthlyRecord, BusinessSummary, RiskLevel, PerformanceMetadata, PerformanceBandLevel, MenuItem } from '../types';
 
 export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?: MonthlyRecord): BusinessSummary {
-  const { revenue, costs, menuItems = [] } = currentRecord;
-  const totalCosts = Object.values(costs).reduce((a, b) => a + Number(b), 0);
-  const netProfit = revenue.total - totalCosts;
-  const margin = (netProfit / revenue.total) * 100;
+  // Safe extraction with deep defaults
+  const revenue = currentRecord?.revenue || { total: 0, online: 0, offline: 0, orders: 0 };
+  const costs = currentRecord?.costs || { food: 0, staff: 0, rent: 0, utilities: 0, marketing: 0, packaging: 0, discounts: 0 };
+  const menuItems = currentRecord?.menuItems || [];
   
-  const foodCostPct = (costs.food / revenue.total) * 100;
-  const staffCostPct = (costs.staff / revenue.total) * 100;
-  const marketingPct = (costs.marketing / revenue.total) * 100;
-  const onlineDependencyPct = (revenue.online / revenue.total) * 100;
-  const discountPct = (costs.discounts / revenue.total) * 100;
+  // Safe normalization of all inputs to prevent NaN
+  const totalRev = Math.max(0.01, Number(revenue.total) || 0);
+  const totalCosts = Object.values(costs).reduce((a, b) => a + (Number(b) || 0), 0);
+  const netProfit = totalRev - totalCosts;
+  const margin = (netProfit / totalRev) * 100;
+  
+  const foodCostPct = ((Number(costs.food) || 0) / totalRev) * 100;
+  const staffCostPct = ((Number(costs.staff) || 0) / totalRev) * 100;
+  const marketingPct = ((Number(costs.marketing) || 0) / totalRev) * 100;
+  const onlineDependencyPct = ((Number(revenue.online) || 0) / totalRev) * 100;
+  const discountPct = ((Number(costs.discounts) || 0) / totalRev) * 100;
 
   // --- MENU INTELLIGENCE: DYNAMIC RANKING PIPELINE ---
-  // Ensure all values are numeric and contributions are fresh
   const processedItems: MenuItem[] = menuItems.map(item => {
-    const price = Number(item.price) || 0;
-    const cost = Number(item.cost) || 0;
-    const sold = Number(item.sold) || 0;
-    const contribution = (price - cost) * sold;
-    return { ...item, price, cost, sold, contribution };
+    const p = Number(item.price) || 0;
+    const c = Number(item.cost) || 0;
+    const s = Number(item.sold) || 0;
+    const contribution = (p - c) * s;
+    return { 
+      ...item, 
+      name: item.name || 'Unnamed Item',
+      price: p, 
+      cost: c, 
+      sold: s, 
+      contribution,
+      popularityRank: 0,
+      profitRank: 0
+    };
   });
 
   const sortedByPopularity = [...processedItems].sort((a, b) => b.sold - a.sold);
@@ -32,8 +46,11 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     profitRank: sortedByProfit.findIndex(i => i.name === item.name) + 1
   }));
 
-  let bestItem: MenuItem | undefined = rankedMenuItems.find(i => i.profitRank === 1);
-  let worstItem: MenuItem | undefined = [...rankedMenuItems].sort((a, b) => (a.cost/a.price) - (b.cost/b.price)).pop();
+  const bestItem: MenuItem | undefined = rankedMenuItems.find(i => i.profitRank === 1);
+  const worstItem: MenuItem | undefined = [...rankedMenuItems]
+    .filter(i => i.price > 0)
+    .sort((a, b) => (a.cost / Math.max(0.1, a.price)) - (b.cost / Math.max(0.1, b.price)))
+    .pop();
 
   // --- DUAL AXIS HEALTH ANALYSIS ---
   let financialHealth: PerformanceBandLevel = 'Healthy';
@@ -41,13 +58,15 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   else if (margin < 18) financialHealth = 'Weak';
 
   let structuralResilience: PerformanceBandLevel = 'Healthy';
-  if (onlineDependencyPct > 70 || foodCostPct > 36 || currentRecord.dataQualityScore < 70) {
+  const dataQuality = Number(currentRecord?.dataQualityScore) || 0;
+  
+  if (onlineDependencyPct > 70 || foodCostPct > 36 || dataQuality < 70) {
     structuralResilience = 'Dangerous';
   } else if (onlineDependencyPct > 55 || foodCostPct > 33 || discountPct > 10) {
     structuralResilience = 'Weak';
   }
 
-  let level: PerformanceBandLevel = financialHealth === 'Dangerous' || structuralResilience === 'Dangerous' ? 'Dangerous' : 
+  const level: PerformanceBandLevel = financialHealth === 'Dangerous' || structuralResilience === 'Dangerous' ? 'Dangerous' : 
                                     (financialHealth === 'Weak' || structuralResilience === 'Weak' ? 'Weak' : 'Healthy');
 
   let reason = 'Operations are within healthy industry bands.';
@@ -67,31 +86,35 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   }
 
   // Delta calculations
-  let deltas;
+  let deltas = {
+    revenue: 0, margin: 0, foodCost: 0, onlineDependency: 0, marketing: 0, netProfit: 0, orders: 0
+  };
+
   if (previousRecord) {
-    const prevTotalCosts = Object.values(previousRecord.costs).reduce((a, b) => a + Number(b), 0);
-    const prevNetProfit = previousRecord.revenue.total - prevTotalCosts;
-    const prevMargin = (prevNetProfit / previousRecord.revenue.total) * 100;
-    const prevFoodCostPct = (previousRecord.costs.food / previousRecord.revenue.total) * 100;
-    const prevOnlinePct = (previousRecord.revenue.online / previousRecord.revenue.total) * 100;
-    const prevMarketingPct = (previousRecord.costs.marketing / previousRecord.revenue.total) * 100;
+    const prevTotalRev = Math.max(0.01, Number(previousRecord.revenue?.total) || 0);
+    const prevTotalCosts = Object.values(previousRecord.costs || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+    const prevNetProfit = prevTotalRev - prevTotalCosts;
+    const prevMargin = (prevNetProfit / prevTotalRev) * 100;
+    const prevFoodCostPct = ((Number(previousRecord.costs?.food) || 0) / prevTotalRev) * 100;
+    const prevOnlinePct = ((Number(previousRecord.revenue?.online) || 0) / prevTotalRev) * 100;
+    const prevMarketingPct = ((Number(previousRecord.costs?.marketing) || 0) / prevTotalRev) * 100;
 
     deltas = {
-      revenue: ((revenue.total - previousRecord.revenue.total) / previousRecord.revenue.total) * 100,
+      revenue: ((totalRev - prevTotalRev) / prevTotalRev) * 100,
       margin: margin - prevMargin,
       foodCost: foodCostPct - prevFoodCostPct,
       onlineDependency: onlineDependencyPct - prevOnlinePct,
       marketing: marketingPct - prevMarketingPct,
       netProfit: prevNetProfit !== 0 ? ((netProfit - prevNetProfit) / Math.abs(prevNetProfit)) * 100 : 0,
-      orders: previousRecord.revenue.orders !== 0 ? ((revenue.orders - previousRecord.revenue.orders) / previousRecord.revenue.orders) * 100 : 0
+      orders: previousRecord.revenue?.orders ? ((revenue.orders - previousRecord.revenue.orders) / previousRecord.revenue.orders) * 100 : 0
     };
   }
 
   const attentionScore = Math.min(100, 
-    (100 - currentRecord.dataQualityScore) * 0.4 + 
+    (100 - dataQuality) * 0.4 + 
     (riskLevel === 'High' ? 40 : riskLevel === 'Medium' ? 15 : 0) + 
     (isHighDiscount ? 15 : 0) +
-    (Math.abs(deltas?.margin || 0) > 3 ? 20 : 0)
+    (Math.abs(deltas.margin) > 3 ? 20 : 0)
   );
 
   const narrative = {
@@ -99,19 +122,19 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     change: isHighDiscount 
       ? `Promotional spending is high at ${discountPct.toFixed(1)}% of revenue. This is a primary leakage point.`
       : (bestItem 
-        ? `${bestItem.name} is driving ${((bestItem.contribution/revenue.total)*100).toFixed(1)}% of total revenue contribution.`
+        ? `${bestItem.name} is driving ${((bestItem.contribution / totalRev) * 100).toFixed(1)}% of total revenue contribution.`
         : 'Initial pilot baseline created.'),
     action: isHighDiscount 
       ? 'Audit platform-wide "Auto-Apply" coupons. Set a hard ceiling of 8% for promotional burn.'
-      : (worstItem && (worstItem.cost/worstItem.price) > 0.45
-        ? `Audit prep waste for ${worstItem.name} immediately; margin is ${((1 - worstItem.cost/worstItem.price)*100).toFixed(1)}%.`
+      : (worstItem && (worstItem.cost / Math.max(0.1, worstItem.price)) > 0.45
+        ? `Audit prep waste for ${worstItem.name} immediately; margin is ${((1 - worstItem.cost / Math.max(0.1, worstItem.price)) * 100).toFixed(1)}%.`
         : level === 'Healthy' 
           ? 'Maintain current procurement standards while scaling marketing.' 
           : `Prioritize ${driver} optimization to move health to the next band.`)
   };
 
   return {
-    revenue: revenue.total,
+    revenue: totalRev,
     costs: totalCosts,
     netProfit,
     margin,
@@ -122,7 +145,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     foodCostPct,
     staffCostPct,
     onlineDependencyPct,
-    dataQuality: currentRecord.dataQualityScore,
+    dataQuality,
     attentionScore,
     bestItem,
     worstItem,
