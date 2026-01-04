@@ -7,12 +7,13 @@ import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
 import { DataInputForm } from './components/DataInputForm';
 import { MenuIntelligence } from './components/MenuIntelligence';
-import { Client, MonthlyRecord, BusinessSummary, DecisionStatus, DecisionLogEntry, AiInsight, InsightHistoryItem } from './types';
+import { Client, MonthlyRecord, BusinessSummary, DecisionStatus, DecisionLogEntry, AiInsight, MenuItem } from './types';
 import { generateInsights } from './geminiService';
 import { runAnalyticsEngine } from './services/analyticsEngine';
 import { MOCK_CLIENTS, MOCK_RECORDS, BENCHMARKS } from './constants';
 
 const App: React.FC = () => {
+  // 1. STATE HOOKS (ALWAYS TOP)
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [clients, setClients] = useState<Client[]>(() => {
     const saved = localStorage.getItem('OBIS_CLIENTS');
@@ -31,19 +32,7 @@ const App: React.FC = () => {
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [loggedDecisions, setLoggedDecisions] = useState<Set<string>>(new Set());
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { localStorage.setItem('OBIS_CLIENTS', JSON.stringify(clients)); }, [clients]);
-  useEffect(() => { localStorage.setItem('OBIS_RECORDS', JSON.stringify(records)); }, [records]);
-  
-  useEffect(() => { 
-    setLoggedDecisions(new Set()); 
-    if (selectedClientId) {
-      setActiveTab('analysis');
-      setMeetingMode(false);
-    }
-  }, [selectedClientId]);
-
+  // 2. MEMO HOOKS (ALWAYS BEFORE CONDITIONAL RETURNS)
   const activeClient = useMemo(() => clients.find(c => c.id === selectedClientId), [selectedClientId, clients]);
   const clientRecords = useMemo(() => selectedClientId ? records[selectedClientId] || [] : [], [selectedClientId, records]);
   const activeRecord = clientRecords[0] || null;
@@ -67,10 +56,13 @@ const App: React.FC = () => {
   }, [clients, records]);
 
   const menuQuadrants = useMemo(() => {
-    if (!summary?.rankedMenuItems) return { stars: [], puzzles: [], horses: [], dogs: [] };
+    if (!summary?.rankedMenuItems || summary.rankedMenuItems.length === 0) {
+      return { stars: [], puzzles: [], horses: [], dogs: [] };
+    }
     const items = summary.rankedMenuItems;
-    const avgSold = items.reduce((a, i) => a + i.sold, 0) / items.length;
-    const avgProfit = items.reduce((a, i) => a + (i.contribution / i.sold), 0) / items.length;
+    const avgSold = items.reduce((acc, i) => acc + i.sold, 0) / items.length;
+    const avgProfit = items.reduce((acc, i) => acc + (i.contribution / i.sold), 0) / items.length;
+
     return {
       stars: items.filter(i => i.sold >= avgSold && (i.contribution / i.sold) >= avgProfit),
       puzzles: items.filter(i => i.sold < avgSold && (i.contribution / i.sold) >= avgProfit),
@@ -98,15 +90,49 @@ const App: React.FC = () => {
     };
   }, [activeRecord]);
 
+  // 3. EFFECT HOOKS
+  useEffect(() => { localStorage.setItem('OBIS_CLIENTS', JSON.stringify(clients)); }, [clients]);
+  useEffect(() => { localStorage.setItem('OBIS_RECORDS', JSON.stringify(records)); }, [records]);
+  
+  useEffect(() => { 
+    setLoggedDecisions(new Set()); 
+    if (selectedClientId) {
+      setActiveTab('analysis');
+      setMeetingMode(false);
+    }
+  }, [selectedClientId]);
+
+  // 4. HANDLERS
   const handleSaveData = (data: any) => {
     if (!selectedClientId) return;
     const newRecord: MonthlyRecord = {
       clientId: selectedClientId,
       month: new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
-      revenue: { total: Number(data.revenue), online: Number(data.online), offline: Number(data.revenue) - Number(data.online), orders: Number(data.orders) },
-      costs: { food: Number(data.foodCost), staff: Number(data.staff), rent: Number(data.rent), utilities: Number(data.utilities), marketing: Number(data.marketing), packaging: Number(data.packaging), discounts: Number(data.discounts) },
+      revenue: { 
+        total: Number(data.revenue), 
+        online: Number(data.online), 
+        offline: Number(data.revenue) - Number(data.online), 
+        orders: Number(data.orders) 
+      },
+      costs: { 
+        food: Number(data.foodCost), 
+        staff: Number(data.staff), 
+        rent: Number(data.rent), 
+        utilities: Number(data.utilities), 
+        marketing: Number(data.marketing), 
+        packaging: Number(data.packaging), 
+        discounts: Number(data.discounts) 
+      },
       topItems: data.menuItems?.slice(0, 3).map((i: any) => i.name) || [],
-      menuItems: data.menuItems || [],
+      menuItems: (data.menuItems || []).map((i: any) => ({
+        name: i.name,
+        price: Number(i.price || 0),
+        cost: Number(i.cost || 0),
+        sold: Number(i.sold || 0),
+        contribution: (Number(i.price || 0) - Number(i.cost || 0)) * Number(i.sold || 0),
+        popularityRank: 0,
+        profitRank: 0
+      })),
       dataQualityScore: Number(data.dataQualityScore)
     };
     setRecords(prev => ({ ...prev, [selectedClientId]: [newRecord, ...(prev[selectedClientId] || [])].slice(0, 12) }));
@@ -138,8 +164,6 @@ const App: React.FC = () => {
 
   const handleLogDecision = (insight: AiInsight, status: DecisionStatus, insightId: string) => {
     if (!selectedClientId || !activeClient) return;
-    
-    // 1. Log to Decision Log
     const entry: DecisionLogEntry = { 
       id: Math.random().toString(36).substr(2, 9), 
       recommendation: insight.recommendation, 
@@ -151,14 +175,10 @@ const App: React.FC = () => {
 
     setClients(prev => prev.map(c => {
       if (c.id !== selectedClientId) return c;
-      
       let updatedHistory = [...(c.insightHistory || [])];
-      
-      // 2. If Approved, update insightHistory for AI consistency
       if (status === 'Accepted') {
         const currentMonth = activeRecord?.month || 'N/A';
         const existingHistoryIdx = updatedHistory.findIndex(h => h.month === currentMonth);
-        
         if (existingHistoryIdx > -1) {
           updatedHistory[existingHistoryIdx].problems = Array.from(new Set([...updatedHistory[existingHistoryIdx].problems, insight.observation]));
           updatedHistory[existingHistoryIdx].actions = Array.from(new Set([...updatedHistory[existingHistoryIdx].actions, insight.recommendation]));
@@ -171,17 +191,12 @@ const App: React.FC = () => {
           });
         }
       }
-
-      return { 
-        ...c, 
-        decisionLog: [entry, ...(c.decisionLog || [])],
-        insightHistory: updatedHistory
-      };
+      return { ...c, decisionLog: [entry, ...(c.decisionLog || [])], insightHistory: updatedHistory };
     }));
-    
     setLoggedDecisions(prev => new Set(prev).add(insightId));
   };
 
+  // 5. CONDITIONAL RENDERS (AFTER ALL HOOKS)
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center">

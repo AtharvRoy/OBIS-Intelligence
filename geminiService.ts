@@ -8,6 +8,11 @@ export const generateInsights = async (
   topItems: string[],
   history: InsightHistoryItem[] = []
 ): Promise<AiInsight[]> => {
+  // CRITICAL: Ensure API key is present before attempting initialization
+  if (!process.env.API_KEY) {
+    throw new Error("Gemini API Key missing. Ensure it is configured in the environment.");
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const metrics = {
