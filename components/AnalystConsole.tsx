@@ -1,5 +1,5 @@
+
 import React from 'react';
-import { StatCard } from './StatCard';
 import { 
   ShieldAlert,
   Target,
@@ -19,8 +19,13 @@ import {
   Box,
   Users,
   Utensils,
-  Map
+  Map,
+  Layers,
+  Sparkles,
+  IndianRupee
 } from 'lucide-react';
+// Fix: Added missing StatCard import
+import { StatCard } from './StatCard';
 import { BusinessSummary } from '../types';
 import { BENCHMARKS } from '../constants';
 
@@ -31,21 +36,6 @@ interface AnalystConsoleProps {
 
 export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meetingMode }) => {
   const { performanceBand, deltas } = summary;
-
-  const DeltaBadge = ({ value, label, invert = false }: { value?: number, label: string, invert?: boolean }) => {
-    if (value === undefined || Math.abs(value) < 0.1) return null;
-    const isPositiveChange = value > 0;
-    const isGood = invert ? !isPositiveChange : isPositiveChange;
-    const Icon = isPositiveChange ? ArrowUpRight : ArrowDownRight;
-    const colorClass = isGood ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50';
-    
-    return (
-      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${colorClass} mt-1`}>
-        <Icon className="w-3 h-3" />
-        {isPositiveChange ? '+' : ''}{value.toFixed(1)}% {label}
-      </div>
-    );
-  };
 
   const getBandStyles = (level: string) => {
     if (level === 'Dangerous') return 'bg-rose-500 text-white';
@@ -82,55 +72,117 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
   if (meetingMode) {
     const tactics = getStrategicTactics(performanceBand.driver);
     return (
-      <div className="space-y-16 animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-5xl mx-auto pb-20">
-        <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-3 mb-6">
-            <Map className="w-5 h-5 text-blue-600" />
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Meeting Narrative Flow</h3>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {['Business Health', 'What Changed', 'Why It Matters', 'Action Roadmap'].map((step, i) => (
-              <div key={i} className="flex items-center gap-3 p-4 rounded-2xl bg-slate-50 border border-white">
-                <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm text-slate-900 font-black text-xs">{i+1}</div>
-                <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-tight">{step}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section id="health" className="relative group">
-          <div className={`rounded-[3.5rem] p-14 transition-all shadow-2xl ${getBandStyles(performanceBand.level)} relative overflow-hidden`}>
-            <div className="absolute top-0 right-0 p-10 opacity-10"><Activity className="w-40 h-40" /></div>
-            <div className="relative z-10 max-w-3xl">
-              <div className="flex items-center gap-3 mb-8 opacity-80">
-                <ShieldCheck className="w-6 h-6" />
-                <p className="font-black text-xs uppercase tracking-widest">Performance Assessment</p>
-              </div>
-              <h2 className="text-4xl lg:text-6xl font-black tracking-tight leading-[1.1] mb-6">{performanceBand.narrative.health}</h2>
-              <div className="inline-flex items-center gap-2 px-6 py-2 bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-xs font-black uppercase tracking-widest">Priority Driver: {performanceBand.driver}</div>
+      <div className="space-y-20 animate-in fade-in slide-in-from-bottom-12 duration-1000 max-w-6xl mx-auto pb-32">
+        {/* PRESENTATION HEADER */}
+        <section className="bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-sm">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+            <div className="space-y-2">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-600 mb-2">Executive Agenda</h3>
+              <h2 className="text-4xl font-black text-slate-900 tracking-tighter">Strategic Review</h2>
+            </div>
+            <div className="flex gap-4">
+              {[
+                { label: 'Revenue', val: `₹${(summary.revenue / 100000).toFixed(1)}L`, icon: IndianRupee },
+                { label: 'Profit', val: `${summary.margin.toFixed(0)}%`, icon: TrendingUp },
+                { label: 'Attention', val: summary.attentionScore.toFixed(0), icon: Activity }
+              ].map((m, i) => (
+                <div key={i} className="px-6 py-4 bg-slate-50 border border-slate-100 rounded-3xl text-center min-w-[120px]">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{m.label}</p>
+                  <p className="text-xl font-black text-slate-900">{m.val}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        <section id="roadmap" className="relative">
-          <div className="bg-slate-950 text-white p-16 lg:p-24 rounded-[5rem] shadow-2xl relative overflow-hidden">
-            <div className="max-w-4xl relative z-10">
-              <header className="space-y-8 mb-20">
-                <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-[0.3em]">
-                  <CheckCircle2 className="w-4 h-4" /> Recommended Executive Action
+        {/* STEP 1: CURRENT STATE */}
+        <section className="relative">
+          <div className={`rounded-[4rem] p-16 lg:p-24 transition-all shadow-2xl ${getBandStyles(performanceBand.level)} relative overflow-hidden`}>
+            <div className="absolute -top-10 -right-10 opacity-10 rotate-12"><ShieldCheck className="w-80 h-80" /></div>
+            <div className="relative z-10 max-w-4xl">
+              <div className="flex items-center gap-4 mb-10">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center font-black text-white border border-white/30">1</div>
+                <p className="font-black text-xs uppercase tracking-[0.3em]">Business Health Assessment</p>
+              </div>
+              <h2 className="text-5xl lg:text-8xl font-black tracking-tighter leading-[0.9] mb-10">
+                Current Status: <span className="opacity-75">{performanceBand.level}</span>
+              </h2>
+              <div className="p-10 bg-black/10 backdrop-blur-md rounded-[3rem] border border-white/20">
+                <p className="text-2xl lg:text-3xl font-bold leading-tight italic">"{performanceBand.narrative.health}"</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* STEP 2: NARRATIVE CHANGE */}
+        <section className="bg-white rounded-[4rem] p-16 lg:p-24 border border-slate-200 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-16 opacity-[0.03]"><Layers className="w-64 h-64" /></div>
+          <div className="max-w-4xl relative z-10">
+            <div className="flex items-center gap-4 mb-10">
+              <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-slate-900 border border-slate-200">2</div>
+              <p className="font-black text-xs uppercase tracking-[0.3em] text-slate-400">Critical Observations</p>
+            </div>
+            <h3 className="text-4xl lg:text-6xl font-black text-slate-900 tracking-tighter leading-[1] mb-12">
+              What has shifted in the business?
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              <div className="space-y-6">
+                <div className="w-16 h-1 bg-blue-600 rounded-full"></div>
+                <p className="text-2xl font-medium text-slate-500 leading-relaxed">{performanceBand.narrative.change}</p>
+              </div>
+              <div className="bg-slate-50 rounded-[3rem] p-10 space-y-4 border border-slate-100">
+                <div className="flex items-center gap-3 text-blue-600 font-black text-[10px] uppercase tracking-widest">
+                  <Sparkles className="w-4 h-4" /> Root Cause Identified
                 </div>
-                <h3 className="text-5xl lg:text-7xl font-black tracking-tighter leading-[0.95]">{performanceBand.narrative.action}</h3>
+                <p className="text-xl font-black text-slate-900">{performanceBand.reason}</p>
+                <div className="pt-4 border-t border-slate-200 mt-4">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Constraint</p>
+                  <p className="text-lg font-bold text-slate-700">{performanceBand.driver}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* STEP 3: ACTION ROADMAP */}
+        <section className="relative">
+          <div className="bg-slate-950 text-white p-16 lg:p-24 rounded-[5rem] shadow-2xl relative overflow-hidden">
+            <div className="absolute -bottom-20 -left-20 opacity-5"><Target className="w-96 h-96" /></div>
+            <div className="max-w-4xl relative z-10">
+              <div className="flex items-center gap-4 mb-16">
+                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center font-black text-white border border-white/20">3</div>
+                <p className="font-black text-xs uppercase tracking-[0.3em] text-blue-400">The Roadmap to Efficiency</p>
+              </div>
+              <header className="space-y-8 mb-20">
+                <h3 className="text-5xl lg:text-7xl font-black tracking-tighter leading-[0.95] text-white">
+                  Strategic Mandate
+                </h3>
+                <div className="p-10 bg-blue-600/10 border border-blue-500/20 rounded-[3rem]">
+                   <p className="text-2xl lg:text-3xl font-black text-blue-400 leading-tight">
+                    {performanceBand.narrative.action}
+                   </p>
+                </div>
               </header>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-16 border-t border-slate-800/60">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 {tactics.map((tactic, idx) => (
-                  <div key={idx} className="flex flex-col gap-6 p-10 rounded-[3rem] bg-slate-900/50 border border-slate-800/50">
-                    <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center"><tactic.icon className="w-6 h-6 text-slate-400" /></div>
-                    <div className="space-y-3">
-                      <h4 className="font-black text-2xl text-slate-100 tracking-tight">{tactic.title}</h4>
-                      <p className="text-slate-500 text-lg leading-relaxed font-medium">{tactic.desc}</p>
+                  <div key={idx} className="flex flex-col gap-8 p-12 rounded-[4rem] bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all group">
+                    <div className="w-20 h-20 rounded-3xl bg-white/5 flex items-center justify-center border border-white/10 group-hover:bg-blue-600/20 transition-all">
+                      <tactic.icon className="w-10 h-10 text-slate-400 group-hover:text-blue-400" />
+                    </div>
+                    <div className="space-y-4">
+                      <h4 className="font-black text-3xl text-slate-100 tracking-tight">{tactic.title}</h4>
+                      <p className="text-slate-500 text-xl leading-relaxed font-medium">{tactic.desc}</p>
                     </div>
                   </div>
                 ))}
+              </div>
+              <div className="mt-20 pt-16 border-t border-slate-800 flex justify-between items-center opacity-40">
+                <p className="text-sm font-black uppercase tracking-widest italic">OBIS INTELLIGENCE ENGINE v1.6.5</p>
+                <div className="flex gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -160,9 +212,9 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
         <StatCard 
           label="Revenue Hub" 
           value={`₹${(summary.revenue / 100000).toFixed(1)}L`} 
-          subValue={deltas ? `Growth: ${deltas.revenue.toFixed(0)}%` : "Baseline Period"}
+          subValue={summary.deltas ? `Growth: ${summary.deltas.revenue.toFixed(0)}%` : "Baseline Period"}
           icon={<TrendingUp className="w-5 h-5" />}
-          trend={deltas ? { value: deltas.revenue, isGood: deltas.revenue >= 0, type: 'percentage' } : undefined}
+          trend={summary.deltas ? { value: summary.deltas.revenue, isGood: summary.deltas.revenue >= 0, type: 'percentage' } : undefined}
         />
         <StatCard 
           label="Food/COGS" 
@@ -170,7 +222,7 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
           subValue={summary.foodCostPct <= 33 ? "Safe Zone" : "Alert Zone"}
           color={summary.foodCostPct > 33 ? 'red' : 'green'}
           icon={<Target className="w-5 h-5" />}
-          trend={deltas ? { value: deltas.foodCost, isGood: deltas.foodCost <= 0, type: 'points' } : undefined}
+          trend={summary.deltas ? { value: summary.deltas.foodCost, isGood: summary.deltas.foodCost <= 0, type: 'points' } : undefined}
         />
         <StatCard 
           label="Dependency" 

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -7,7 +6,7 @@ import {
 import { StatCard } from './StatCard';
 import { 
   TrendingUp, CreditCard, PieChart as PieIcon, AlertCircle, 
-  IndianRupee, LayoutGrid, Activity, ShieldCheck, ArrowUpRight, ArrowDownRight, Zap, Tag
+  IndianRupee, LayoutGrid, Activity, ShieldCheck, ArrowUpRight, ArrowDownRight, Zap, Tag, Info
 } from 'lucide-react';
 import { BusinessSummary, RevenueData, CostCategory } from '../types';
 import { BENCHMARKS } from '../constants';
@@ -34,11 +33,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, revenue, costs })
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1'];
 
-  // Benchmark Status Helpers
   const isNetMarginSafe = summary.margin >= BENCHMARKS.netMargin.healthy[0];
-  const isFoodCostSafe = summary.foodCostPct <= BENCHMARKS.foodCostPct.healthy[1];
-  
-  // New: Calculate discount from the cost object if possible (it's lumped in costs prop)
   const discountVal = costs.find(c => c.name === 'Discounts')?.value || 0;
   const discountBurn = (discountVal / summary.revenue) * 100;
 
@@ -92,14 +87,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, revenue, costs })
         />
       </div>
 
-      {/* NEW SECTION: PERFORMANCE MOMENTUM */}
-      {summary.deltas && (
-        <section className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-12 opacity-5"><Zap className="w-32 h-32" /></div>
-          <div className="relative z-10">
-            <h3 className="text-sm font-black uppercase tracking-[0.3em] text-blue-400 mb-8 flex items-center gap-3">
-              <Activity className="w-4 h-4" /> Performance Momentum (MoM)
-            </h3>
+      <section className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden min-h-[160px]">
+        <div className="absolute top-0 right-0 p-12 opacity-5"><Zap className="w-32 h-32" /></div>
+        <div className="relative z-10">
+          <h3 className="text-sm font-black uppercase tracking-[0.3em] text-blue-400 mb-8 flex items-center gap-3">
+            <Activity className="w-4 h-4" /> Performance Momentum (MoM)
+          </h3>
+          {summary.deltas ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
               {[
                 { label: 'Revenue Velocity', val: summary.deltas.revenue, unit: '%', isGood: summary.deltas.revenue >= 0 },
@@ -118,9 +112,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, revenue, costs })
                 </div>
               ))}
             </div>
-          </div>
-        </section>
-      )}
+          ) : (
+            <div className="flex items-center gap-4 text-slate-400">
+               <Info className="w-6 h-6" />
+               <p className="font-bold">Momentum tracking will activate once you add data for a second consecutive month.</p>
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm">

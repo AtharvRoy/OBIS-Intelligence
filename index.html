@@ -27,35 +27,47 @@
                 position: static !important;
                 width: 100% !important;
                 visibility: visible !important;
+                background: white !important;
             }
             body { background: white !important; padding: 0 !important; margin: 0 !important; }
             
-            section, .pdf-section { 
+            .pdf-page {
+                page-break-after: always !important;
+                break-after: page !important;
+                padding: 3rem !important;
+                height: 297mm;
+                width: 210mm;
+                margin: 0 auto;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                position: relative;
+            }
+
+            .pdf-section { 
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
-                margin-bottom: 6rem !important;
-                padding-top: 3rem;
-                width: 100% !important;
+                margin-bottom: 3rem !important;
             }
             
             .pdf-card {
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
-                border: 2px solid #f1f5f9 !important;
-                border-radius: 40px !important;
-                padding: 3rem !important;
-            }
-
-            .page-break {
-                page-break-before: always !important;
-                break-before: always !important;
-                margin-top: 0 !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 2.5rem !important;
+                padding: 2rem !important;
+                background: #f8fafc !important;
+                margin-bottom: 1.5rem;
             }
 
             @page {
                 size: A4 portrait;
-                margin: 2.5cm;
+                margin: 0;
             }
+            
+            .print-text-huge { font-size: 3.5rem !important; line-height: 1 !important; }
+            .print-text-large { font-size: 2rem !important; }
+            .print-text-med { font-size: 1.25rem !important; }
         }
         
         .print-only { display: none; }
