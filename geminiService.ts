@@ -1,15 +1,14 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { BusinessSummary, AiInsight, InsightHistoryItem } from './types';
 
-const PROMPT_VERSION = "v1.6.0-trust-aware";
+const PROMPT_VERSION = "v1.6.3-flash";
 
 export const generateInsights = async (
   summary: BusinessSummary,
   topItems: string[],
   history: InsightHistoryItem[] = []
 ): Promise<AiInsight[]> => {
-  // Fix: Direct initialization of Gemini client right before use as per guidelines
+  // Always initialize with the latest configuration requirements
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const metrics = {
@@ -30,30 +29,18 @@ export const generateInsights = async (
     : "No previous historical data available for this client.";
 
   const prompt = `
-    You are a restaurant business intelligence assistant (OBIS Internal Analyst).
+    Analyze this restaurant's performance for the latest reporting cycle.
     
-    Objective:
-    - Analyze the current performance metrics.
-    - Specifically address the Profit Anchor and Efficiency Leak.
-    - Review history to ensure continuity.
-    - SIGNAL CONFIDENCE: If dataQualityScore is low (<75), be more cautious. 
+    Data Summary: ${JSON.stringify(metrics)}
+    ${historyContext}
 
-    Context:
-    - Current Metrics: ${JSON.stringify(metrics)}
-    - ${historyContext}
-
-    Tasks:
-    1. Identify 3 critical business problems. 
-    2. Suggest 3 practical, "owner-friendly" recommendations.
-    3. Calculate a confidenceScore (0-100) for each insight based on the reliability of the input data and provide a confidenceReason.
-
-    Structure the response as a JSON array of objects with keys: observation, importance, recommendation, impactPotential, confidenceScore, confidenceReason.
+    Return exactly 3 strategic insights in simple English for the owner.
+    Structure your response as a JSON array.
   `;
 
   try {
-    // Fix: Using gemini-3-pro-preview for complex reasoning task as per guidelines
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -62,12 +49,12 @@ export const generateInsights = async (
           items: {
             type: Type.OBJECT,
             properties: {
-              observation: { type: Type.STRING },
-              importance: { type: Type.STRING },
-              recommendation: { type: Type.STRING },
-              impactPotential: { type: Type.STRING },
-              confidenceScore: { type: Type.NUMBER },
-              confidenceReason: { type: Type.STRING },
+              observation: { type: Type.STRING, description: "Key finding from the data." },
+              importance: { type: Type.STRING, description: "Why the owner should pay attention." },
+              recommendation: { type: Type.STRING, description: "1 actionable step." },
+              impactPotential: { type: Type.STRING, description: "Estimated profit impact." },
+              confidenceScore: { type: Type.NUMBER, description: "0-100 score." },
+              confidenceReason: { type: Type.STRING, description: "Logic for the score." },
             },
             required: ["observation", "importance", "recommendation", "impactPotential", "confidenceScore", "confidenceReason"],
           },
@@ -76,16 +63,12 @@ export const generateInsights = async (
     });
 
     const text = response.text;
-    if (!text) {
-      console.error("OBIS: Empty response from AI model.");
-      return [];
-    }
+    if (!text) throw new Error("Empty AI response received.");
 
     const parsed = JSON.parse(text.trim());
     return parsed.map((item: any) => ({ ...item, promptVersion: PROMPT_VERSION }));
   } catch (error) {
-    console.error("OBIS: AI Generation Error:", error);
-    // Return mock-style placeholder if on localhost and key fails, so UI doesn't break
-    return [];
+    console.error("OBIS Intelligence Engine Error:", error);
+    throw error; // Let the UI handle the specific error display
   }
 };

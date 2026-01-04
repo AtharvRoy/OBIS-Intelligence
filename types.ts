@@ -1,8 +1,33 @@
-
 export type ClientStatus = 'pilot' | 'active' | 'paused' | 'inactive';
 export type RiskLevel = 'Low' | 'Medium' | 'High';
 export type PerformanceBandLevel = 'Healthy' | 'Weak' | 'Dangerous';
 export type DecisionStatus = 'Accepted' | 'Modified' | 'Rejected' | 'Pending';
+
+// Fix: Added missing Benchmark types used in constants.ts
+export interface BenchmarkItem {
+  healthy: [number, number];
+  label: string;
+}
+
+export interface Benchmark {
+  foodCostPct: BenchmarkItem;
+  staffCostPct: BenchmarkItem;
+  netMargin: BenchmarkItem;
+  marketingPct: BenchmarkItem;
+}
+
+// Fix: Added missing RevenueData type used in Dashboard.tsx
+export interface RevenueData {
+  channel: string;
+  gross: number;
+  net: number;
+}
+
+// Fix: Added missing CostCategory type used in Dashboard.tsx
+export interface CostCategory {
+  name: string;
+  value: number;
+}
 
 export interface PerformanceMetadata {
   level: PerformanceBandLevel;
@@ -105,24 +130,6 @@ export interface BusinessSummary {
     netProfit: number;
     orders: number;
   };
-}
-
-export interface Benchmark {
-  foodCostPct: { healthy: [number, number], label: string };
-  staffCostPct: { healthy: [number, number], label: string };
-  netMargin: { healthy: [number, number], label: string };
-  marketingPct: { healthy: [number, number], label: string };
-}
-
-export interface RevenueData {
-  channel: string;
-  gross: number;
-  net: number;
-}
-
-export interface CostCategory {
-  name: string;
-  value: number;
 }
 
 export interface AiInsight {

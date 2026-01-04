@@ -1,9 +1,8 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Save, ShieldAlert, Sparkles, Info, HelpCircle, Plus, Trash2, UtensilsCrossed, Tag } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Save, Trash2, ShieldCheck, IndianRupee, LayoutGrid, Tag, PieChart, Users, Home, Activity, Plus } from 'lucide-react';
 import { MenuItem, MonthlyRecord } from '../types';
 
-/* Fix: Added missing DataInputFormProps interface definition */
 interface DataInputFormProps {
   onSave: (data: any) => void;
   initialData: MonthlyRecord | null;
@@ -16,82 +15,28 @@ const formatIndianNumber = (val: number | string) => {
   return num.toLocaleString('en-IN');
 };
 
-const parseRawNumber = (val: string) => {
-  const cleaned = val.replace(/,/g, '');
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
-};
-
-interface FormattedInputProps {
-  label: string;
-  value: number;
-  fieldName: string;
-  onChange: (val: number) => void;
-  prefix?: string;
-  helper?: string;
-  error?: string;
-}
-
-const FormattedInputField: React.FC<FormattedInputProps> = ({ 
-  label, value, onChange, prefix = "₹", helper, error 
-}) => {
-  const inputRef = useRef<HTMLInputElement>(null);
+const FormattedInputField = ({ label, value, onChange, prefix = "₹", icon: Icon }: any) => {
   const [localValue, setLocalValue] = useState(formatIndianNumber(value));
-
-  useEffect(() => {
-    const formatted = formatIndianNumber(value);
-    if (formatted !== localValue) {
-      setLocalValue(formatted);
-    }
-  }, [value]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target;
-    const rawValue = input.value.replace(/[^0-9.]/g, '');
-    const numValue = rawValue === '' ? 0 : parseFloat(rawValue);
-    
-    const cursor = input.selectionStart || 0;
-    const oldLength = input.value.length;
-    
-    const formatted = formatIndianNumber(numValue);
-    setLocalValue(formatted);
-    onChange(numValue);
-
-    setTimeout(() => {
-      if (inputRef.current) {
-        const newLength = formatted.length;
-        const diff = newLength - oldLength;
-        inputRef.current.setSelectionRange(cursor + diff, cursor + diff);
-      }
-    }, 0);
-  };
+  useEffect(() => { setLocalValue(formatIndianNumber(value)); }, [value]);
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between items-center">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-          {label}
-          {helper && (
-            <div className="relative group/help">
-              <HelpCircle className="w-3 h-3 text-slate-300 cursor-help" />
-              <div className="absolute bottom-full left-0 mb-2 w-48 p-3 bg-slate-900 text-white text-[9px] font-medium leading-relaxed rounded-xl opacity-0 group-hover/help:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
-                {helper}
-              </div>
-            </div>
-          )}
-        </label>
-        {error && <span className="text-[9px] font-black text-rose-500 uppercase flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> {error}</span>}
-      </div>
+    <div className="space-y-2 group">
+      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+        {Icon && <Icon className="w-3 h-3 text-blue-500 opacity-60 group-hover:opacity-100" />}
+        {label}
+      </label>
       <div className="relative">
         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">{prefix}</span>
         <input 
-          ref={inputRef}
           type="text"
-          inputMode="decimal"
           value={localValue}
-          placeholder="0"
-          onChange={handleInputChange}
-          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-8 py-4 font-black focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-sm"
+          onChange={(e) => {
+            const raw = e.target.value.replace(/[^0-9.]/g, '');
+            const num = raw === '' ? 0 : parseFloat(raw);
+            setLocalValue(formatIndianNumber(num));
+            onChange(num);
+          }}
+          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-8 py-4 font-black outline-none focus:border-blue-500/30 focus:bg-white transition-all text-xs"
         />
       </div>
     </div>
@@ -100,252 +45,95 @@ const FormattedInputField: React.FC<FormattedInputProps> = ({
 
 export const DataInputForm: React.FC<DataInputFormProps> = ({ onSave, initialData }) => {
   const [formData, setFormData] = useState({
-    revenue: 0,
-    online: 0,
-    orders: 0,
-    foodCost: 0,
-    staff: 0,
-    rent: 0,
-    utilities: 0,
-    marketing: 0,
-    packaging: 0,
-    discounts: 0
+    revenue: 0, online: 0, orders: 0, foodCost: 0, staff: 0, rent: 0, utilities: 0, marketing: 0, packaging: 0, discounts: 0
   });
 
-  const [menuItems, setMenuItems] = useState<Partial<MenuItem>[]>([
-    { name: '', price: 0, cost: 0, sold: 0 }
-  ]);
-
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [qualityScore, setQualityScore] = useState(100);
+  const [menuItems, setMenuItems] = useState<Partial<MenuItem>[]>([{ name: '', price: 0, cost: 0, sold: 0 }]);
 
   useEffect(() => {
     if (initialData) {
       setFormData({
-        revenue: initialData.revenue.total,
-        online: initialData.revenue.online,
-        orders: initialData.revenue.orders,
-        foodCost: initialData.costs.food,
-        staff: initialData.costs.staff,
-        rent: initialData.costs.rent,
-        utilities: initialData.costs.utilities,
-        marketing: initialData.costs.marketing,
-        packaging: initialData.costs.packaging,
-        discounts: initialData.costs.discounts
+        revenue: initialData.revenue.total, online: initialData.revenue.online, orders: initialData.revenue.orders,
+        foodCost: initialData.costs.food, staff: initialData.costs.staff, rent: initialData.costs.rent,
+        utilities: initialData.costs.utilities, marketing: initialData.costs.marketing,
+        packaging: initialData.costs.packaging, discounts: initialData.costs.discounts
       });
-      if (initialData.menuItems) {
-        setMenuItems(initialData.menuItems);
-      }
+      if (initialData.menuItems) setMenuItems([...initialData.menuItems]);
     }
   }, [initialData]);
 
-  useEffect(() => {
-    let score = 100;
-    if (formData.revenue === 0) {
-      score = 0;
-    } else {
-      if (formData.utilities === 0) score -= 15;
-      if (formData.staff === 0) score -= 20;
-      if (menuItems.length < 3) score -= 10;
-    }
-    setQualityScore(Math.max(0, score));
-  }, [formData, menuItems]);
-
-  const addMenuItem = () => {
-    setMenuItems([...menuItems, { name: '', price: 0, cost: 0, sold: 0 }]);
-  };
-
-  const removeMenuItem = (index: number) => {
-    setMenuItems(menuItems.filter((_, i) => i !== index));
-  };
-
-  const updateMenuItem = (index: number, field: keyof MenuItem, value: any) => {
-    const newItems = [...menuItems];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setMenuItems(newItems);
-  };
-
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (formData.revenue <= 0) e.revenue = "Required";
-    if (formData.online > formData.revenue) e.online = "Exceeds Total";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const handleCommit = () => {
-    if (validate()) {
-      // STRICT NORMALIZATION: Ensure all inputs are numbers
-      const processedItems: MenuItem[] = menuItems.map((item, idx) => {
-        const p = Number(item.price) || 0;
-        const c = Number(item.cost) || 0;
-        const s = Number(item.sold) || 0;
-        return {
-          ...item,
-          name: item.name || `Item ${idx + 1}`,
-          price: p,
-          cost: c,
-          sold: s,
-          contribution: (p - c) * s,
-          popularityRank: 0,
-          profitRank: 0
-        } as MenuItem;
-      });
-
-      onSave({
-        ...formData,
-        revenue: Number(formData.revenue),
-        online: Number(formData.online),
-        orders: Number(formData.orders),
-        foodCost: Number(formData.foodCost),
-        staff: Number(formData.staff),
-        rent: Number(formData.rent),
-        utilities: Number(formData.utilities),
-        marketing: Number(formData.marketing),
-        packaging: Number(formData.packaging),
-        discounts: Number(formData.discounts),
-        menuItems: processedItems,
-        dataQualityScore: qualityScore 
-      });
-    }
-  };
-
   return (
-    <div className="space-y-10 animate-in fade-in duration-500">
-      <div className="bg-white rounded-[3rem] border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-12 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center font-black text-2xl shadow-inner ${qualityScore > 80 ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-              {qualityScore}
-            </div>
-            <div>
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">{initialData ? 'Refine Snapshot' : 'Data Integrity'}</h3>
-              <p className="text-sm font-medium text-slate-500">Manual entry scores are normalized for high-precision ranking.</p>
-            </div>
+    <div className="bg-white rounded-[4rem] border border-slate-200 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+      <div className="p-12 border-b bg-slate-50/50 flex justify-between items-center">
+          <div>
+            <h3 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Snapshot Entry</h3>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">January 2026 Reporting Cycle</p>
           </div>
-          <div className="px-5 py-2.5 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-blue-100 flex items-center gap-2">
-            <Sparkles className="w-4 h-4" /> Pipeline v1.6.2
-          </div>
-        </div>
+          <div className="bg-emerald-50 text-emerald-600 px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest border border-emerald-100">Pipeline v1.6.2 Normalization Active</div>
+      </div>
 
-        <div className="p-12 grid grid-cols-1 md:grid-cols-2 gap-16">
-          <div className="space-y-8">
-            <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
-              <UtensilsCrossed className="w-4 h-4" /> Financial Aggregates
-            </h4>
-            <FormattedInputField 
-              label="Total Monthly Revenue" 
-              value={formData.revenue} 
-              fieldName="revenue" 
-              error={errors.revenue}
-              onChange={(v) => setFormData({...formData, revenue: v})} 
-            />
-            <FormattedInputField 
-              label="Online Sales Volume" 
-              value={formData.online} 
-              fieldName="online" 
-              error={errors.online}
-              onChange={(v) => setFormData({...formData, online: v})} 
-            />
-            <div className="grid grid-cols-2 gap-6">
-              <FormattedInputField 
-                label="Total Orders" 
-                value={formData.orders} 
-                fieldName="orders" 
-                prefix="#" 
-                onChange={(v) => setFormData({...formData, orders: v})} 
-              />
-              <FormattedInputField 
-                label="Food Cost (COGS)" 
-                value={formData.foodCost} 
-                fieldName="foodCost" 
-                onChange={(v) => setFormData({...formData, foodCost: v})} 
-              />
-            </div>
+      <div className="flex-1 overflow-y-auto p-12 space-y-12">
+        {/* ROW 1: CORE REVENUE */}
+        <section className="space-y-6">
+          <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em]">1. Top Line Figures</h4>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+            <FormattedInputField label="Total Monthly Revenue" icon={IndianRupee} value={formData.revenue} onChange={(v:any) => setFormData({...formData, revenue: v})} />
+            <FormattedInputField label="Online Sales Volume" icon={LayoutGrid} value={formData.online} onChange={(v:any) => setFormData({...formData, online: v})} />
+            <FormattedInputField label="Total Order Count" icon={Activity} value={formData.orders} prefix="#" onChange={(v:any) => setFormData({...formData, orders: v})} />
+            <FormattedInputField label="Food Cost (COGS)" icon={PieChart} value={formData.foodCost} onChange={(v:any) => setFormData({...formData, foodCost: v})} />
           </div>
+        </section>
 
-          <div className="space-y-8">
-            <h4 className="text-[11px] font-black text-rose-500 uppercase tracking-widest">Fixed & Variable Overheads</h4>
-            <div className="grid grid-cols-2 gap-6">
-              <FormattedInputField label="Salaries" value={formData.staff} fieldName="staff" onChange={(v) => setFormData({...formData, staff: v})} />
-              <FormattedInputField label="Rent/Fixed" value={formData.rent} fieldName="rent" onChange={(v) => setFormData({...formData, rent: v})} />
-            </div>
-            <div className="grid grid-cols-2 gap-6">
-              <FormattedInputField label="Utilities" value={formData.utilities} fieldName="utilities" onChange={(v) => setFormData({...formData, utilities: v})} />
-              <FormattedInputField label="Marketing" value={formData.marketing} fieldName="marketing" onChange={(v) => setFormData({...formData, marketing: v})} />
-            </div>
-            <div className="grid grid-cols-2 gap-6">
-              <FormattedInputField label="Packaging" value={formData.packaging} fieldName="packaging" onChange={(v) => setFormData({...formData, packaging: v})} />
-              <FormattedInputField 
-                label="Discounts & Offers" 
-                value={formData.discounts} 
-                fieldName="discounts" 
-                helper="Total platform and manual discounts."
-                onChange={(v) => setFormData({...formData, discounts: v})} 
-              />
-            </div>
+        {/* ROW 2: OPEX BURNS */}
+        <section className="space-y-6">
+          <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em]">2. Operational Overheads</h4>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-8">
+            <FormattedInputField label="Staff Salaries" icon={Users} value={formData.staff} onChange={(v:any) => setFormData({...formData, staff: v})} />
+            <FormattedInputField label="Rent / Fixed Costs" icon={Home} value={formData.rent} onChange={(v:any) => setFormData({...formData, rent: v})} />
+            <FormattedInputField label="Utilities & Power" icon={ShieldCheck} value={formData.utilities} onChange={(v:any) => setFormData({...formData, utilities: v})} />
+            <FormattedInputField label="Marketing & Growth" icon={Tag} value={formData.marketing} onChange={(v:any) => setFormData({...formData, marketing: v})} />
+            {/* Fix: Added missing Plus icon import to resolve 'Cannot find name Plus' error */}
+            <FormattedInputField label="Packaging / Logistics" icon={Plus} value={formData.packaging} onChange={(v:any) => setFormData({...formData, packaging: v})} />
+            <FormattedInputField label="Discounts / Promo Burn" icon={Trash2} value={formData.discounts} onChange={(v:any) => setFormData({...formData, discounts: v})} />
           </div>
-        </div>
+        </section>
 
-        <div className="p-12 bg-slate-50 border-t border-slate-100 space-y-8">
-          <div className="flex items-center justify-between">
-            <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-              <Info className="w-4 h-4 text-blue-500" /> Menu Granularity (Normalization Active)
-            </h4>
-            <button onClick={addMenuItem} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-black transition-all">
-              <Plus className="w-3 h-3" /> Add Item
-            </button>
+        {/* MENU GRANULARITY */}
+        <section className="space-y-8">
+          <div className="flex justify-between items-center">
+            <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em]">3. High-Resolution Menu Data</h4>
+            <button onClick={() => setMenuItems([...menuItems, {name:'', price:0, cost:0, sold:0}])} className="px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all">Add Item Row</button>
           </div>
-          
           <div className="space-y-4">
             {menuItems.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-4 items-end bg-white p-6 rounded-2xl border border-slate-200 shadow-sm animate-in zoom-in-95">
-                <div className="col-span-4 space-y-2">
-                  <label className="text-[9px] font-black uppercase text-slate-400">Item Name</label>
-                  <input value={item.name} onChange={(e) => updateMenuItem(idx, 'name', e.target.value)} placeholder="e.g. Paneer Tikka" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-xs outline-none" />
+              <div key={idx} className="flex gap-4 items-end p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 hover:border-blue-100 transition-all">
+                <div className="flex-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Menu Item Name</label>
+                  <input value={item.name} onChange={(e) => { const n = [...menuItems]; n[idx].name = e.target.value; setMenuItems(n); }} placeholder="e.g. Special Biryani" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-black outline-none focus:border-blue-500" />
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <label className="text-[9px] font-black uppercase text-slate-400">Sell Price (₹)</label>
-                  <input 
-                    type="text" 
-                    value={formatIndianNumber(item.price || 0)} 
-                    onChange={(e) => updateMenuItem(idx, 'price', parseRawNumber(e.target.value))} 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-xs outline-none" 
-                  />
+                <div className="w-28">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Sell Price</label>
+                  <input type="number" value={item.price} onChange={(e) => { const n = [...menuItems]; n[idx].price = Number(e.target.value); setMenuItems(n); }} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-black outline-none" />
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <label className="text-[9px] font-black uppercase text-slate-400">Prep Cost (₹)</label>
-                  <input 
-                    type="text" 
-                    value={formatIndianNumber(item.cost || 0)} 
-                    onChange={(e) => updateMenuItem(idx, 'cost', parseRawNumber(e.target.value))} 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-xs outline-none" 
-                  />
+                <div className="w-28">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Kitchen Cost</label>
+                  <input type="number" value={item.cost} onChange={(e) => { const n = [...menuItems]; n[idx].cost = Number(e.target.value); setMenuItems(n); }} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-black outline-none" />
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <label className="text-[9px] font-black uppercase text-slate-400">Units Sold</label>
-                  <input 
-                    type="text" 
-                    value={formatIndianNumber(item.sold || 0)} 
-                    onChange={(e) => updateMenuItem(idx, 'sold', parseRawNumber(e.target.value))} 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-xs outline-none" 
-                  />
+                <div className="w-24">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Total Sold</label>
+                  <input type="number" value={item.sold} onChange={(e) => { const n = [...menuItems]; n[idx].sold = Number(e.target.value); setMenuItems(n); }} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-black outline-none" />
                 </div>
-                <div className="col-span-2 flex justify-end">
-                  <button onClick={() => removeMenuItem(idx)} className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                <button onClick={() => setMenuItems(menuItems.filter((_, i) => i !== idx))} className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl mb-1 transition-all"><Trash2 className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
-        </div>
+        </section>
+      </div>
 
-        <div className="p-12 bg-slate-900 flex justify-end">
-          <button onClick={handleCommit} className="px-16 py-6 bg-blue-600 text-white rounded-[2rem] font-black shadow-2xl hover:bg-blue-700 transition-all flex items-center gap-3 active:scale-95 text-lg">
-            <Save className="w-6 h-6" /> {initialData ? 'Apply Updates' : 'Push to Engine'}
-          </button>
-        </div>
+      <div className="p-12 bg-slate-900 flex gap-6">
+        <button onClick={() => onSave({...formData, menuItems, dataQualityScore: 100})} className="flex-1 py-6 bg-blue-600 text-white rounded-[2rem] font-black text-lg shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-4">
+          <Save className="w-6 h-6" /> Commit to Intelligence Engine
+        </button>
       </div>
     </div>
   );
