@@ -13,7 +13,7 @@ import { runAnalyticsEngine } from './services/analyticsEngine';
 import { MOCK_CLIENTS, MOCK_RECORDS, BENCHMARKS } from './constants';
 
 const App: React.FC = () => {
-  // 1. STATE HOOKS (ALWAYS TOP)
+  // 1. STATE HOOKS (CRITICAL: MUST REMAIN AT THE VERY TOP)
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [clients, setClients] = useState<Client[]>(() => {
     const saved = localStorage.getItem('OBIS_CLIENTS');
@@ -32,7 +32,7 @@ const App: React.FC = () => {
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [loggedDecisions, setLoggedDecisions] = useState<Set<string>>(new Set());
 
-  // 2. MEMO HOOKS (ALWAYS BEFORE CONDITIONAL RETURNS)
+  // 2. MEMO HOOKS (CRITICAL: MUST REMAIN BEFORE ANY CONDITIONAL RENDERS)
   const activeClient = useMemo(() => clients.find(c => c.id === selectedClientId), [selectedClientId, clients]);
   const clientRecords = useMemo(() => selectedClientId ? records[selectedClientId] || [] : [], [selectedClientId, records]);
   const activeRecord = clientRecords[0] || null;
@@ -156,7 +156,8 @@ const App: React.FC = () => {
         setClients(prev => prev.map(c => c.id === selectedClientId ? { ...c, currentInsights: results } : c));
       }
     } catch (e: any) {
-      alert(`AI Engine Failure: Check terminal. Ensure process.env.API_KEY is active.`);
+      console.error(e);
+      alert(`AI Engine Failure: Consult browser console for diagnostic logs.`);
     } finally { 
       setLoadingInsights(false); 
     }

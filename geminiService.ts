@@ -8,12 +8,24 @@ export const generateInsights = async (
   topItems: string[],
   history: InsightHistoryItem[] = []
 ): Promise<AiInsight[]> => {
-  // CRITICAL: Ensure API key is present before attempting initialization
-  if (!process.env.API_KEY) {
-    throw new Error("Gemini API Key missing. Ensure it is configured in the environment.");
+  // Obtain API key exclusively from process.env.API_KEY as per guidelines
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey) {
+    console.error("Gemini API Key missing in process.env.API_KEY. AI Insights will be disabled.");
+    // Return a safe fallback instead of throwing to prevent app-wide crash
+    return [{
+      observation: "AI Engine Offline",
+      importance: "System Configuration Issue",
+      recommendation: "Please ensure the API_KEY is correctly configured in your environment variables.",
+      impactPotential: "Low",
+      confidenceScore: 0,
+      confidenceReason: "API_KEY not found",
+      promptVersion: PROMPT_VERSION
+    }];
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
   
   const metrics = {
     netMargin: `${summary.margin.toFixed(1)}%`,
@@ -77,6 +89,14 @@ export const generateInsights = async (
     return parsed.map((item: any) => ({ ...item, promptVersion: PROMPT_VERSION }));
   } catch (error) {
     console.error("OBIS SDK ERROR:", error);
-    throw error;
+    return [{
+      observation: "AI Analysis Failed",
+      importance: "Service Interruption",
+      recommendation: "Wait a moment and try refreshing the analysis.",
+      impactPotential: "None",
+      confidenceScore: 0,
+      confidenceReason: error instanceof Error ? error.message : "Unknown error",
+      promptVersion: PROMPT_VERSION
+    }];
   }
 };
