@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   ShieldAlert,
@@ -24,7 +23,6 @@ import {
   Sparkles,
   IndianRupee
 } from 'lucide-react';
-// Fix: Added missing StatCard import
 import { StatCard } from './StatCard';
 import { BusinessSummary } from '../types';
 import { BENCHMARKS } from '../constants';
@@ -230,6 +228,7 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
           subValue="Online Sales Mix"
           color={summary.onlineDependencyPct > 55 ? 'orange' : 'blue'}
           icon={<LayoutGrid className="w-5 h-5" />}
+          trend={summary.deltas ? { value: summary.deltas.onlineDependency, isGood: summary.deltas.onlineDependency <= 0, type: 'points' } : undefined}
         />
         <StatCard 
           label="Resilience" 
@@ -247,15 +246,23 @@ export const AnalystConsole: React.FC<AnalystConsoleProps> = ({ summary, meeting
           </h3>
           <div className="space-y-8">
             {[
-              { label: BENCHMARKS.foodCostPct.label, val: summary.foodCostPct, range: BENCHMARKS.foodCostPct.healthy, invert: true },
-              { label: BENCHMARKS.staffCostPct.label, val: summary.staffCostPct, range: BENCHMARKS.staffCostPct.healthy, invert: true },
-              { label: BENCHMARKS.netMargin.label, val: summary.margin, range: BENCHMARKS.netMargin.healthy }
+              { label: BENCHMARKS.foodCostPct.label, val: summary.foodCostPct, range: BENCHMARKS.foodCostPct.healthy, invert: true, trend: deltas?.foodCost },
+              { label: BENCHMARKS.staffCostPct.label, val: summary.staffCostPct, range: BENCHMARKS.staffCostPct.healthy, invert: true, trend: deltas?.staffCost },
+              { label: BENCHMARKS.netMargin.label, val: summary.margin, range: BENCHMARKS.netMargin.healthy, trend: deltas?.margin }
             ].map((b, i) => {
               const isSafe = b.invert ? b.val <= b.range[1] : b.val >= b.range[0];
+              const isTrendGood = b.trend !== undefined ? (b.invert ? b.trend <= 0 : b.trend >= 0) : true;
               return (
                 <div key={i} className="space-y-4">
                   <div className="flex justify-between text-[11px] font-black uppercase tracking-widest text-slate-400">
-                    <span>{b.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span>{b.label}</span>
+                      {b.trend !== undefined && (
+                        <span className={`flex items-center gap-0.5 text-[8px] px-2 py-0.5 rounded-full border ${isTrendGood ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                          {b.trend > 0 ? '+' : ''}{b.trend.toFixed(1)}pp
+                        </span>
+                      )}
+                    </div>
                     <span className={isSafe ? 'text-emerald-600' : 'text-rose-600'}>{isSafe ? 'Target Met' : 'Action Required'}</span>
                   </div>
                   <div className="h-4 bg-slate-100 rounded-full relative overflow-hidden">

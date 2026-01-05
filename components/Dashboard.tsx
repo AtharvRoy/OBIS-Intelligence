@@ -6,7 +6,7 @@ import {
 import { StatCard } from './StatCard';
 import { 
   TrendingUp, CreditCard, PieChart as PieIcon, AlertCircle, 
-  IndianRupee, LayoutGrid, Activity, ShieldCheck, ArrowUpRight, ArrowDownRight, Zap, Tag, Info
+  IndianRupee, LayoutGrid, Activity, ShieldCheck, ArrowUpRight, ArrowDownRight, Zap, Tag, Info, Users, Megaphone
 } from 'lucide-react';
 import { BusinessSummary, RevenueData, CostCategory } from '../types';
 import { BENCHMARKS } from '../constants';
@@ -68,14 +68,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, revenue, costs })
           }}
         />
         <StatCard 
-          label="Discount Burn" 
-          value={`${discountBurn.toFixed(1)}%`} 
-          subValue={`₹${(discountVal/1000).toFixed(1)}k given away`}
-          color={discountBurn > 8 ? "red" : "blue"}
+          label="Food Cost Pct" 
+          value={`${summary.foodCostPct.toFixed(1)}%`} 
+          subValue={`Target: ${BENCHMARKS.foodCostPct.healthy[0]}-${BENCHMARKS.foodCostPct.healthy[1]}%`}
+          color={summary.foodCostPct > BENCHMARKS.foodCostPct.healthy[1] ? "red" : "green"}
           icon={<Tag className="w-5 h-5" />}
+          trend={summary.deltas ? {
+            value: summary.deltas.foodCost,
+            isGood: summary.deltas.foodCost <= 0,
+            type: 'points'
+          } : undefined}
           benchmarkStatus={{
-            isSafe: discountBurn < 8,
-            label: discountBurn < 8 ? "Controlled Promo" : "High Leakage"
+            isSafe: summary.foodCostPct <= BENCHMARKS.foodCostPct.healthy[1],
+            label: summary.foodCostPct <= BENCHMARKS.foodCostPct.healthy[1] ? "Efficient COGS" : "Cost Leakage"
           }}
         />
         <StatCard 
@@ -91,23 +96,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, revenue, costs })
         <div className="absolute top-0 right-0 p-12 opacity-5"><Zap className="w-32 h-32" /></div>
         <div className="relative z-10">
           <h3 className="text-sm font-black uppercase tracking-[0.3em] text-blue-400 mb-8 flex items-center gap-3">
-            <Activity className="w-4 h-4" /> Performance Momentum (MoM)
+            <Activity className="w-4 h-4" /> Performance Momentum (MoM Shifts)
           </h3>
           {summary.deltas ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
               {[
-                { label: 'Revenue Velocity', val: summary.deltas.revenue, unit: '%', isGood: summary.deltas.revenue >= 0 },
-                { label: 'Profit Growth', val: summary.deltas.netProfit, unit: '%', isGood: summary.deltas.netProfit >= 0 },
-                { label: 'Margin Expansion', val: summary.deltas.margin, unit: 'pp', isGood: summary.deltas.margin >= 0 },
-                { label: 'Order Volume', val: summary.deltas.orders, unit: '%', isGood: summary.deltas.orders >= 0 },
+                { label: 'Revenue', val: summary.deltas.revenue, unit: '%', isGood: summary.deltas.revenue >= 0, icon: IndianRupee },
+                { label: 'Profit', val: summary.deltas.netProfit, unit: '%', isGood: summary.deltas.netProfit >= 0, icon: TrendingUp },
+                { label: 'Margin', val: summary.deltas.margin, unit: 'pp', isGood: summary.deltas.margin >= 0, icon: Activity },
+                { label: 'Food Cost', val: summary.deltas.foodCost, unit: 'pp', isGood: summary.deltas.foodCost <= 0, icon: Tag },
+                { label: 'Staffing', val: summary.deltas.staffCost, unit: 'pp', isGood: summary.deltas.staffCost <= 0, icon: Users },
+                { label: 'Marketing', val: summary.deltas.marketing, unit: 'pp', isGood: summary.deltas.marketing <= 0, icon: Megaphone },
               ].map((m, idx) => (
-                <div key={idx} className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{m.label}</p>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-2xl font-black ${m.isGood ? 'text-emerald-400' : 'text-rose-400'}`}>
+                <div key={idx} className="space-y-2 p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
+                  <div className="flex items-center gap-2 mb-1">
+                    <m.icon className="w-3 h-3 text-slate-500" />
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{m.label}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xl font-black ${m.isGood ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {m.val > 0 ? '+' : ''}{m.val.toFixed(1)}{m.unit}
                     </span>
-                    {m.val !== 0 && (m.isGood ? <ArrowUpRight className="w-5 h-5 text-emerald-400" /> : <ArrowDownRight className="w-5 h-5 text-rose-400" />)}
+                    {Math.abs(m.val) > 0.1 && (m.isGood ? <ArrowUpRight className="w-4 h-4 text-emerald-400" /> : <ArrowDownRight className="w-4 h-4 text-rose-400" />)}
                   </div>
                 </div>
               ))}

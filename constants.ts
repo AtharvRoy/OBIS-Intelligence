@@ -19,8 +19,14 @@ export const MOCK_CLIENTS: Client[] = [
     status: 'active',
     startMonth: 'Jan 2024',
     lastUpdatedAt: '2024-03-20T10:00:00Z',
-    insightHistory: [],
-    // Fix: Added decisionLog property
+    insightHistory: [
+      {
+        month: 'February 2024',
+        problems: ['High waste in perishable stock observed.'],
+        actions: ['Negotiated new credit terms with vendor "FreshLine".', 'Implemented daily stock audit.'],
+        timestamp: '2024-02-28T18:00:00Z'
+      }
+    ],
     decisionLog: []
   },
   {
@@ -34,7 +40,6 @@ export const MOCK_CLIENTS: Client[] = [
     startMonth: 'Feb 2024',
     lastUpdatedAt: '2024-03-18T14:30:00Z',
     insightHistory: [],
-    // Fix: Added decisionLog property
     decisionLog: []
   }
 ];

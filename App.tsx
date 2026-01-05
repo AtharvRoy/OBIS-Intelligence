@@ -1,19 +1,19 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Plus, ArrowLeft, ShieldCheck, ArrowRight, Sparkles, Download, 
-  RefreshCw, Trash2, FileText, CheckCircle2, XCircle, FileInput, BarChart3, Lightbulb, Monitor, Upload, History, Zap, Target, Star, HelpCircle, Activity, LayoutGrid, IndianRupee, ShieldAlert, Save, Eye, Users, Utensils, TrendingUp
+  RefreshCw, Trash2, FileText, CheckCircle2, XCircle, FileInput, BarChart3, Lightbulb, Monitor, Upload, History, Zap, Target, Star, HelpCircle, Activity, LayoutGrid, IndianRupee, ShieldAlert, Save, Eye, Users, Utensils, TrendingUp, Filter, Calendar, AlertCircle, Info
 } from 'lucide-react';
 import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
 import { DataInputForm } from './components/DataInputForm';
 import { MenuIntelligence } from './components/MenuIntelligence';
-import { Client, MonthlyRecord, BusinessSummary, DecisionStatus, DecisionLogEntry, AiInsight, MenuItem } from './types';
+import { Client, MonthlyRecord, BusinessSummary, DecisionStatus, DecisionLogEntry, AiInsight, MenuItem, ClientStatus } from './types';
 import { generateInsights } from './geminiService';
 import { runAnalyticsEngine } from './services/analyticsEngine';
 import { MOCK_CLIENTS, MOCK_RECORDS, BENCHMARKS } from './constants';
 
 const App: React.FC = () => {
-  // 1. STATE HOOKS (CRITICAL: MUST REMAIN AT THE VERY TOP)
+  // 1. STATE HOOKS
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [clients, setClients] = useState<Client[]>(() => {
     const saved = localStorage.getItem('OBIS_CLIENTS');
@@ -31,8 +31,9 @@ const App: React.FC = () => {
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [loggedDecisions, setLoggedDecisions] = useState<Set<string>>(new Set());
+  const [lifecycleFilter, setLifecycleFilter] = useState<ClientStatus | 'all'>('all');
 
-  // 2. MEMO HOOKS (CRITICAL: MUST REMAIN BEFORE ANY CONDITIONAL RENDERS)
+  // 2. MEMO HOOKS
   const activeClient = useMemo(() => clients.find(c => c.id === selectedClientId), [selectedClientId, clients]);
   const clientRecords = useMemo(() => selectedClientId ? records[selectedClientId] || [] : [], [selectedClientId, records]);
   const activeRecord = clientRecords[0] || null;
@@ -44,16 +45,24 @@ const App: React.FC = () => {
   }, [activeRecord, previousRecord]);
 
   const portfolioStats = useMemo(() => {
-    return clients.map(client => {
-      const recs = records[client.id] || [];
-      let eng = null;
-      try { eng = recs[0] ? runAnalyticsEngine(recs[0], recs[1]) : null; } catch (e) {}
-      const lastUpdate = client.lastUpdatedAt || new Date().toISOString();
-      const isStale = (Date.now() - new Date(lastUpdate).getTime()) > 1000 * 60 * 60 * 24 * 7;
-      const score = eng ? (eng.attentionScore || 0) + (isStale ? 20 : 0) : 100;
-      return { client, score, status: eng?.performanceBand?.level || 'Healthy', risk: eng?.riskLevel || 'Low' };
-    }).sort((a, b) => b.score - a.score);
-  }, [clients, records]);
+    return clients
+      .filter(c => lifecycleFilter === 'all' || c.status === lifecycleFilter)
+      .map(client => {
+        const recs = records[client.id] || [];
+        let eng = null;
+        try { eng = recs[0] ? runAnalyticsEngine(recs[0], recs[1]) : null; } catch (e) {}
+        const lastUpdate = client.lastUpdatedAt || new Date().toISOString();
+        const isStale = (Date.now() - new Date(lastUpdate).getTime()) > 1000 * 60 * 60 * 24 * 7;
+        
+        let baseScore = eng ? eng.attentionScore || 0 : 50;
+        if (client.status === 'paused') baseScore *= 0.6;
+        if (client.status === 'inactive') baseScore *= 0.1;
+        
+        const finalScore = baseScore + (isStale ? 15 : 0);
+        return { client, score: Math.min(100, finalScore), health: eng?.performanceBand?.level || 'Healthy', risk: eng?.riskLevel || 'Low' };
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [clients, records, lifecycleFilter]);
 
   const menuQuadrants = useMemo(() => {
     if (!summary?.rankedMenuItems || summary.rankedMenuItems.length === 0) {
@@ -142,7 +151,7 @@ const App: React.FC = () => {
 
   const handleDeleteClient = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Remove this client?")) return;
+    if (!confirm("Remove this client from the terminal?")) return;
     setClients(prev => prev.filter(c => c.id !== id));
     if (selectedClientId === id) setSelectedClientId(null);
   };
@@ -151,7 +160,7 @@ const App: React.FC = () => {
     if (!summary || !activeRecord || !selectedClientId) return;
     setLoadingInsights(true);
     try {
-      const results = await generateInsights(summary, activeRecord.topItems, activeClient?.insightHistory || []);
+      const results = await generateInsights(summary, activeRecord.topItems ?? [], activeClient?.insightHistory ?? []);
       if (results && results.length > 0) {
         setClients(prev => prev.map(c => c.id === selectedClientId ? { ...c, currentInsights: results } : c));
       }
@@ -197,7 +206,38 @@ const App: React.FC = () => {
     setLoggedDecisions(prev => new Set(prev).add(insightId));
   };
 
-  // 5. CONDITIONAL RENDERS (AFTER ALL HOOKS)
+  const getStatusColor = (status: ClientStatus) => {
+    switch (status) {
+      case 'pilot': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+      case 'active': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'paused': return 'bg-amber-100 text-amber-700 border-amber-200';
+      case 'inactive': return 'bg-slate-100 text-slate-500 border-slate-200';
+      default: return 'bg-slate-100 text-slate-700';
+    }
+  };
+
+  const getHealthColor = (health: string) => {
+    switch (health) {
+      case 'Healthy': return 'bg-emerald-100 text-emerald-700';
+      case 'Weak': return 'bg-amber-100 text-amber-700';
+      case 'Dangerous': return 'bg-rose-100 text-rose-700';
+      default: return 'bg-slate-100 text-slate-700';
+    }
+  };
+
+  const getPriorityColor = (score: number) => {
+    if (score >= 75) return 'text-rose-600 bg-rose-50 border-rose-100';
+    if (score >= 40) return 'text-amber-600 bg-amber-50 border-amber-100';
+    return 'text-blue-600 bg-blue-50 border-blue-100';
+  };
+
+  const getConfidenceLevel = (score: number) => {
+    if (score >= 85) return { label: 'High', color: 'text-emerald-500 bg-emerald-50 border-emerald-100' };
+    if (score >= 60) return { label: 'Medium', color: 'text-blue-500 bg-blue-50 border-blue-100' };
+    return { label: 'Low', color: 'text-rose-500 bg-rose-50 border-rose-100' };
+  };
+
+  // 5. CONDITIONAL RENDERS
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center">
@@ -213,56 +253,124 @@ const App: React.FC = () => {
   if (!selectedClientId) {
     return (
       <div className="min-h-screen bg-slate-50 p-6 lg:p-12">
-        <div className="max-w-6xl mx-auto space-y-12">
+        <div className="max-w-7xl mx-auto space-y-12">
           <header className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-            <div className="space-y-2">
-              <h1 className="text-5xl font-black text-slate-900 tracking-tighter">Portfolio</h1>
-              <p className="text-slate-500 font-medium ml-1 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-blue-500" /> Strategic Monitor: {portfolioStats.length} Entities</p>
+            <div className="space-y-4">
+              <h1 className="text-6xl font-black text-slate-900 tracking-tighter">Portfolio</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { id: 'all', label: 'All Projects' },
+                  { id: 'active', label: 'Active' },
+                  { id: 'pilot', label: 'Pilot' },
+                  { id: 'paused', label: 'Paused' },
+                  { id: 'inactive', label: 'Archive' }
+                ].map(f => (
+                  <button 
+                    key={f.id} 
+                    onClick={() => setLifecycleFilter(f.id as any)}
+                    className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${lifecycleFilter === f.id ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-200'}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex gap-4">
-              <button onClick={() => setShowNewClientForm(true)} className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black shadow-xl">
-                <Plus className="w-5 h-5 inline mr-2" /> Add Client
+              <button onClick={() => setShowNewClientForm(true)} className="bg-blue-600 text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2">
+                <Plus className="w-5 h-5" /> Add New Client
               </button>
             </div>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {portfolioStats.map(({ client, score, status, risk }) => (
-              <button key={client.id} onClick={() => setSelectedClientId(client.id)} className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all text-left relative group">
-                <div className="flex justify-between items-start mb-10">
-                  <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${status === 'Healthy' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{status}</div>
-                  <Trash2 onClick={(e) => handleDeleteClient(client.id, e)} className="w-5 h-5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            {portfolioStats.map(({ client, score, health, risk }) => (
+              <button key={client.id} onClick={() => setSelectedClientId(client.id)} className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all text-left relative group flex flex-col h-full overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-600 opacity-[0.02] rounded-full blur-3xl group-hover:scale-150 transition-all"></div>
+                
+                <div className="flex justify-between items-start mb-10 relative z-10">
+                  <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${getStatusColor(client.status)}`}>
+                    {client.status}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Trash2 onClick={(e) => handleDeleteClient(client.id, e)} className="w-5 h-5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100" />
+                  </div>
                 </div>
-                <h3 className="text-3xl font-black text-slate-900 mb-2 leading-tight">{client.name}</h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-10">{client.cuisine} • {client.city}</p>
-                <div className="flex items-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                   <Activity className="w-3 h-3" /> Score: {score.toFixed(0)}
-                   <TrendingUp className="w-3 h-3" /> {risk} Risk
+
+                <div className="flex-1 relative z-10">
+                  <h3 className="text-3xl font-black text-slate-900 mb-2 leading-[1.1] tracking-tight">{client.name}</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-8">{client.cuisine} • {client.city}</p>
+                  
+                  {/* ATTENTION SCORE METER */}
+                  <div className="space-y-3 mb-8">
+                    <div className="flex justify-between items-end">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Attention Priority</p>
+                      <p className={`text-xl font-black ${score >= 75 ? 'text-rose-600' : score >= 40 ? 'text-amber-600' : 'text-blue-600'}`}>{score.toFixed(0)}</p>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-1000 ${score >= 75 ? 'bg-rose-500' : score >= 40 ? 'bg-amber-500' : 'bg-blue-500'}`} 
+                        style={{ width: `${score}%` }} 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-8 border-t border-slate-50 flex items-center justify-between relative z-10">
+                  <div className="flex items-center gap-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${getPriorityColor(score)}`}>
+                      <Activity className="w-3 h-3" />
+                      {score >= 75 ? 'Critical' : score >= 40 ? 'Moderate' : 'Stable'}
+                    </div>
+                    <div className={`px-3 py-1.5 rounded-full ${getHealthColor(health)}`}>
+                      {health}
+                    </div>
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-slate-300 group-hover:text-blue-600 transition-all group-hover:translate-x-2" />
                 </div>
               </button>
             ))}
           </div>
         </div>
+
         {showNewClientForm && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md z-50 flex items-center justify-center p-6">
-            <div className="max-w-2xl w-full bg-white rounded-[3rem] p-12">
-               <h2 className="text-4xl font-black mb-10 tracking-tight">New Client</h2>
-               <div className="space-y-6 mb-10">
-                  <input id="new-name" placeholder="Restaurant Name" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold" />
-                  <input id="new-city" placeholder="City" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold" />
-                  <input id="new-cuisine" placeholder="Cuisine (e.g. Italian)" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold" />
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
+            <div className="max-w-2xl w-full bg-white rounded-[4rem] p-16 shadow-2xl relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none"><Zap className="w-40 h-40 text-blue-600" /></div>
+               <h2 className="text-5xl font-black mb-12 tracking-tight">Onboard Entity</h2>
+               <div className="space-y-8 mb-12">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Restaurant Name</label>
+                      <input id="new-name" placeholder="Grand Palace" className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-[2rem] font-bold text-sm outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">City</label>
+                      <input id="new-city" placeholder="Hyderabad" className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-[2rem] font-bold text-sm outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                  </div>
                </div>
                <div className="flex gap-4">
-                  <button onClick={() => setShowNewClientForm(false)} className="flex-1 py-4 bg-slate-100 text-slate-900 rounded-xl font-black">Cancel</button>
+                  <button onClick={() => setShowNewClientForm(false)} className="flex-1 py-5 bg-slate-100 text-slate-900 rounded-[2rem] font-black uppercase tracking-widest text-[10px]">Cancel</button>
                   <button onClick={() => {
                      const n = (document.getElementById('new-name') as HTMLInputElement).value;
                      const c = (document.getElementById('new-city') as HTMLInputElement).value;
-                     const cu = (document.getElementById('new-cuisine') as HTMLInputElement).value;
                      if(!n || !c) return;
-                     const newClient: Client = { id: `c-${Date.now()}`, name: n, type: 'Hybrid', city: c, cuisine: cu || 'General', pricingLevel: 'Mid', status: 'active', startMonth: 'Jan 2026', lastUpdatedAt: new Date().toISOString(), insightHistory: [], decisionLog: [] };
+                     const newClient: Client = { 
+                       id: `c-${Date.now()}`, 
+                       name: n, 
+                       type: 'Hybrid', 
+                       city: c, 
+                       cuisine: 'Multi-cuisine', 
+                       pricingLevel: 'Mid', 
+                       status: 'pilot', 
+                       startMonth: new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), 
+                       lastUpdatedAt: new Date().toISOString(), 
+                       insightHistory: [], 
+                       decisionLog: [] 
+                     };
                      setClients([...clients, newClient]);
                      setShowNewClientForm(false);
-                  }} className="flex-1 py-4 bg-blue-600 text-white rounded-xl font-black">Create</button>
+                  }} className="flex-1 py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-200">Initialize Client</button>
                </div>
             </div>
           </div>
@@ -278,8 +386,11 @@ const App: React.FC = () => {
           <ArrowLeft className="w-5 h-5" /> Portfolio
         </button>
         <div className="mb-12 px-2 text-white">
-          <h2 className="text-2xl font-black mb-2 leading-tight">{activeClient?.name}</h2>
-          <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2"><Monitor className="w-3 h-3" /> Terminal Active</p>
+          <div className={`inline-block px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest mb-4 border ${getStatusColor(activeClient?.status || 'active')}`}>
+            {activeClient?.status}
+          </div>
+          <h2 className="text-3xl font-black mb-2 leading-tight tracking-tight">{activeClient?.name}</h2>
+          <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2"><Monitor className="w-3 h-3" /> System Linked</p>
         </div>
         <nav className="space-y-3 flex-1">
           {[
@@ -308,7 +419,7 @@ const App: React.FC = () => {
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{activeRecord?.month} Reporting</div>
         </header>
 
-        <div className="p-10 lg:p-14 max-w-6xl mx-auto w-full pb-24 no-print">
+        <div className="p-10 lg:p-14 max-w-7xl mx-auto w-full pb-24 no-print">
           {activeTab === 'input' && <DataInputForm onSave={handleSaveData} initialData={activeRecord} />}
           {activeTab === 'analysis' && summary && dashboardData && (
             <div className="space-y-16">
@@ -318,7 +429,7 @@ const App: React.FC = () => {
             </div>
           )}
           {activeTab === 'insights' && (
-            <div className="space-y-12">
+            <div className="space-y-20">
                <div className="bg-slate-900 rounded-[3.5rem] p-20 text-white shadow-2xl relative overflow-hidden">
                  <div className="absolute top-0 right-0 p-20 opacity-10"><Sparkles className="w-40 h-40" /></div>
                  <div className="relative z-10 max-w-2xl">
@@ -329,31 +440,86 @@ const App: React.FC = () => {
                    </button>
                  </div>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                 {activeClient?.currentInsights?.map((ins, idx) => {
-                    const insightId = `ins-${idx}`;
-                    const hasBeenLogged = loggedDecisions.has(insightId);
-                    return (
-                      <div key={idx} className={`bg-white p-14 rounded-[4rem] border transition-all ${hasBeenLogged ? 'border-emerald-200 bg-emerald-50/20 opacity-80' : 'border-slate-200 shadow-xl'}`}>
-                        <div className="flex justify-between items-center mb-8">
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${ins.confidenceScore > 85 ? 'text-emerald-500' : 'text-blue-500'}`}>Confidence: {ins.confidenceScore}%</span>
-                          {hasBeenLogged && <CheckCircle2 className="w-8 h-8 text-emerald-500" />}
-                        </div>
-                        <h4 className="text-3xl font-black mb-6 leading-tight text-slate-900">{ins.observation}</h4>
-                        <p className="text-slate-500 mb-10 text-xl font-medium leading-relaxed">{ins.importance}</p>
-                        <div className="p-10 bg-slate-950 rounded-[3rem] text-white">
-                          <p className="text-2xl font-black italic leading-tight mb-8">"{ins.recommendation}"</p>
-                          {!hasBeenLogged && (
-                            <div className="flex gap-4">
-                              <button onClick={() => handleLogDecision(ins, 'Accepted', insightId)} className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600">Approve</button>
-                              <button onClick={() => handleLogDecision(ins, 'Rejected', insightId)} className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-700">Dismiss</button>
+
+               {/* ACTIVE SUGGESTIONS */}
+               <div className="space-y-8">
+                 <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.4em] ml-2">Active Recommendations</h4>
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                   {activeClient?.currentInsights?.map((ins, idx) => {
+                      const insightId = `ins-${idx}`;
+                      const hasBeenLogged = loggedDecisions.has(insightId);
+                      const confidence = getConfidenceLevel(ins.confidenceScore);
+                      return (
+                        <div key={idx} className={`bg-white p-12 rounded-[4rem] border transition-all ${hasBeenLogged ? 'border-emerald-200 bg-emerald-50/20 opacity-80' : 'border-slate-200 shadow-xl'}`}>
+                          <div className="flex justify-between items-center mb-8">
+                            <div className="flex flex-col gap-1">
+                                <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border ${confidence.color}`}>
+                                    Confidence: {confidence.label} ({ins.confidenceScore}%)
+                                </span>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter ml-1">
+                                    <Info className="w-2 h-2 inline mr-1" /> {ins.confidenceReason}
+                                </p>
                             </div>
-                          )}
+                            {hasBeenLogged && <CheckCircle2 className="w-8 h-8 text-emerald-500" />}
+                          </div>
+                          <h4 className="text-2xl font-black mb-6 leading-tight text-slate-900">{ins.observation}</h4>
+                          <p className="text-slate-500 mb-10 text-sm font-medium leading-relaxed">{ins.importance}</p>
+                          <div className="p-10 bg-slate-950 rounded-[3rem] text-white">
+                            <p className="text-xl font-black italic leading-tight mb-8">"{ins.recommendation}"</p>
+                            {!hasBeenLogged && (
+                              <div className="flex gap-4">
+                                <button onClick={() => handleLogDecision(ins, 'Accepted', insightId)} className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600">Approve</button>
+                                <button onClick={() => handleLogDecision(ins, 'Rejected', insightId)} className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-700">Dismiss</button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                 })}
+                      );
+                   })}
+                 </div>
                </div>
+
+               {/* KNOWLEDGE BASE / HISTORY */}
+               {(activeClient?.insightHistory && activeClient.insightHistory.length > 0) && (
+                 <div className="space-y-8 pt-20 border-t border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <History className="w-6 h-6 text-slate-400" />
+                      <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em]">Knowledge Base & Historical Record</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                       {activeClient.insightHistory.slice().reverse().map((hist, idx) => (
+                         <div key={idx} className="bg-white border border-slate-100 p-10 rounded-[3rem] shadow-sm relative overflow-hidden group">
+                           <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity"><Calendar className="w-20 h-20" /></div>
+                           <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-6 flex items-center gap-2">
+                             <Calendar className="w-3 h-3" /> {hist.month} Performance Cycle
+                           </p>
+                           <div className="space-y-8">
+                              <div className="space-y-3">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Identified Problems</p>
+                                <ul className="space-y-2">
+                                  {hist.problems.map((p, i) => (
+                                    <li key={i} className="text-sm font-bold text-slate-700 flex items-start gap-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 shrink-0" /> {p}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="space-y-3">
+                                <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Strategic Actions Taken</p>
+                                <div className="space-y-3">
+                                  {hist.actions.map((a, i) => (
+                                    <div key={i} className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-emerald-800 text-xs font-black italic">
+                                      "{a}"
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                           </div>
+                         </div>
+                       ))}
+                    </div>
+                 </div>
+               )}
             </div>
           )}
           {activeTab === 'export' && (
@@ -410,19 +576,30 @@ const App: React.FC = () => {
               <div className="pdf-section flex-1 mt-10">
                 <h2 className="text-3xl font-black mb-10 uppercase border-l-[1rem] border-emerald-500 pl-8 print-text-large">AI Strategic Roadmap</h2>
                 <div className="space-y-8">
-                  {(activeClient.currentInsights || []).slice(0, 3).map((ins, i) => (
-                    <div key={i} className="pdf-card border-l-[1.5rem] border-blue-600 bg-white rounded-r-[3rem] rounded-l-none shadow-sm">
-                      <div className="flex items-start gap-6 mb-4">
-                        <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-2xl shrink-0">{i+1}</div>
-                        <div className="space-y-2">
-                           <h4 className="text-2xl font-black text-slate-900 leading-tight">{ins.observation}</h4>
-                           <div className="p-8 bg-blue-50/70 rounded-[2.5rem] border border-blue-100/50 mt-4">
-                             <p className="text-xl font-black text-slate-900 leading-snug print-text-med italic">"{ins.recommendation}"</p>
-                           </div>
+                  {(activeClient.currentInsights || []).slice(0, 3).map((ins, i) => {
+                    const confidence = getConfidenceLevel(ins.confidenceScore);
+                    return (
+                      <div key={i} className="pdf-card border-l-[1.5rem] border-blue-600 bg-white rounded-r-[3rem] rounded-l-none shadow-sm">
+                        <div className="flex items-start gap-6 mb-4">
+                          <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-2xl shrink-0">{i+1}</div>
+                          <div className="flex-1 space-y-2">
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="text-2xl font-black text-slate-900 leading-tight">{ins.observation}</h4>
+                                <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${confidence.color}`}>
+                                    {confidence.label} Confidence
+                                </div>
+                            </div>
+                             <div className="p-8 bg-blue-50/70 rounded-[2.5rem] border border-blue-100/50 mt-4">
+                               <p className="text-xl font-black text-slate-900 leading-snug print-text-med italic">"{ins.recommendation}"</p>
+                               <p className="text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-tighter">
+                                    Logic Validation: {ins.confidenceReason}
+                               </p>
+                             </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

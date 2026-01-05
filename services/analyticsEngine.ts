@@ -1,4 +1,3 @@
-
 import { MonthlyRecord, BusinessSummary, RiskLevel, PerformanceMetadata, PerformanceBandLevel, MenuItem } from '../types';
 
 export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?: MonthlyRecord): BusinessSummary {
@@ -14,7 +13,6 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   const discountPct = (costs.discounts / revenue.total) * 100;
 
   // --- MENU INTELLIGENCE: DYNAMIC RANKING PIPELINE ---
-  // Ensure all values are numeric and contributions are fresh
   const processedItems: MenuItem[] = menuItems.map(item => {
     const price = Number(item.price) || 0;
     const cost = Number(item.cost) || 0;
@@ -66,13 +64,14 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     driver = isHighDiscount ? 'Revenue Leakage' : (onlineDependencyPct > 55 ? 'Platform Commissions' : 'Menu Costing');
   }
 
-  // Delta calculations
+  // --- DELTA CALCULATIONS (MoM) ---
   let deltas;
   if (previousRecord) {
     const prevTotalCosts = Object.values(previousRecord.costs).reduce((a, b) => a + Number(b), 0);
     const prevNetProfit = previousRecord.revenue.total - prevTotalCosts;
     const prevMargin = (prevNetProfit / previousRecord.revenue.total) * 100;
     const prevFoodCostPct = (previousRecord.costs.food / previousRecord.revenue.total) * 100;
+    const prevStaffCostPct = (previousRecord.costs.staff / previousRecord.revenue.total) * 100;
     const prevOnlinePct = (previousRecord.revenue.online / previousRecord.revenue.total) * 100;
     const prevMarketingPct = (previousRecord.costs.marketing / previousRecord.revenue.total) * 100;
 
@@ -80,6 +79,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
       revenue: ((revenue.total - previousRecord.revenue.total) / previousRecord.revenue.total) * 100,
       margin: margin - prevMargin,
       foodCost: foodCostPct - prevFoodCostPct,
+      staffCost: staffCostPct - prevStaffCostPct,
       onlineDependency: onlineDependencyPct - prevOnlinePct,
       marketing: marketingPct - prevMarketingPct,
       netProfit: prevNetProfit !== 0 ? ((netProfit - prevNetProfit) / Math.abs(prevNetProfit)) * 100 : 0,
@@ -87,12 +87,13 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     };
   }
 
-  const attentionScore = Math.min(100, 
-    (100 - currentRecord.dataQualityScore) * 0.4 + 
-    (riskLevel === 'High' ? 40 : riskLevel === 'Medium' ? 15 : 0) + 
-    (isHighDiscount ? 15 : 0) +
-    (Math.abs(deltas?.margin || 0) > 3 ? 20 : 0)
-  );
+  // --- ATTENTION SCORE CALCULATION (0-100) ---
+  const qualityPenalty = (100 - currentRecord.dataQualityScore) * 0.35; // Max 35
+  const riskPenalty = riskLevel === 'High' ? 35 : riskLevel === 'Medium' ? 15 : 0; // Max 35
+  const discountPenalty = isHighDiscount ? 15 : 0; // Max 15
+  const volatilityPenalty = deltas ? Math.min(15, Math.abs(deltas.margin) * 3 + Math.abs(deltas.onlineDependency) * 1) : 0; // Max 15
+
+  const attentionScore = Math.min(100, qualityPenalty + riskPenalty + discountPenalty + volatilityPenalty);
 
   const narrative = {
     health: `Business is ${financialHealth} financially and ${structuralResilience} structurally.`,
@@ -121,6 +122,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     performanceBand: { level, reason, driver, narrative },
     foodCostPct,
     staffCostPct,
+    marketingPct,
     onlineDependencyPct,
     dataQuality: currentRecord.dataQualityScore,
     attentionScore,
