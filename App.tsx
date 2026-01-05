@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Plus, ArrowLeft, ShieldCheck, ArrowRight, Sparkles, Download, 
-  RefreshCw, Trash2, FileText, CheckCircle2, XCircle, FileInput, BarChart3, Lightbulb, Monitor, Upload, History, Zap, Target, Star, HelpCircle, Activity, LayoutGrid, IndianRupee, ShieldAlert, Save, Eye, Users, Utensils, TrendingUp, Filter, Calendar, AlertCircle, Info
+  RefreshCw, Trash2, FileText, CheckCircle2, XCircle, FileInput, BarChart3, Lightbulb, Monitor, Upload, History, Zap, Target, Star, HelpCircle, Activity, LayoutGrid, IndianRupee, ShieldAlert, Save, Eye, Users, Utensils, TrendingUp, Filter, Calendar, AlertCircle, Info, Database
 } from 'lucide-react';
 import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
@@ -32,6 +33,45 @@ const App: React.FC = () => {
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [loggedDecisions, setLoggedDecisions] = useState<Set<string>>(new Set());
   const [lifecycleFilter, setLifecycleFilter] = useState<ClientStatus | 'all'>('all');
+
+  // --- UNIFIED DATA PIPELINE ---
+  const normalizeMonthlyRecord = (record: any): MonthlyRecord => {
+    // Normalization ensures all data types are correct and missing fields are defaulted
+    // This allows the analytics engine to run on a predictable structure
+    const revenue = record.revenue || {};
+    const costs = record.costs || {};
+    
+    return {
+      clientId: record.clientId || '',
+      month: record.month || new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+      revenue: {
+        total: Number(revenue.total || 0),
+        online: Number(revenue.online || 0),
+        offline: Number(revenue.offline || (Number(revenue.total || 0) - Number(revenue.online || 0))),
+        orders: Number(revenue.orders || 0),
+      },
+      costs: {
+        food: Number(costs.food || 0),
+        staff: Number(costs.staff || 0),
+        rent: Number(costs.rent || 0),
+        utilities: Number(costs.utilities || 0),
+        marketing: Number(costs.marketing || 0),
+        packaging: Number(costs.packaging || 0),
+        discounts: Number(costs.discounts || 0),
+      },
+      topItems: Array.isArray(record.topItems) ? record.topItems : [],
+      menuItems: (record.menuItems || []).map((i: any) => ({
+        name: i.name || 'Unnamed Item',
+        price: Number(i.price || 0),
+        cost: Number(i.cost || 0),
+        sold: Number(i.sold || 0),
+        contribution: (Number(i.price || 0) - Number(i.cost || 0)) * Number(i.sold || 0),
+        popularityRank: i.popularityRank || 0,
+        profitRank: i.profitRank || 0
+      })),
+      dataQualityScore: Number(record.dataQualityScore || 100)
+    };
+  };
 
   // 2. MEMO HOOKS
   const activeClient = useMemo(() => clients.find(c => c.id === selectedClientId), [selectedClientId, clients]);
@@ -112,15 +152,54 @@ const App: React.FC = () => {
   }, [selectedClientId]);
 
   // 4. HANDLERS
+  const handleExportBackup = () => {
+    const data = { clients, records, version: '1.6.5', timestamp: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `OBIS_Backup_${new Date().toLocaleDateString()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.clients && data.records) {
+          if (confirm("This will merge/overwrite your existing local data. Proceed?")) {
+            // Process all records through normalization pipeline
+            const normalizedRecords: Record<string, MonthlyRecord[]> = {};
+            Object.keys(data.records).forEach(clientId => {
+              normalizedRecords[clientId] = (data.records[clientId] || []).map((r: any) => normalizeMonthlyRecord(r));
+            });
+            
+            setClients(data.clients);
+            setRecords(normalizedRecords);
+            alert("Backup Restored Successfully with Data Normalization.");
+          }
+        }
+      } catch (err) {
+        alert("Invalid backup file format.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleSaveData = (data: any) => {
     if (!selectedClientId) return;
-    const newRecord: MonthlyRecord = {
+    
+    // Map form data to internal record structure
+    const rawRecord = {
       clientId: selectedClientId,
       month: new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
       revenue: { 
         total: Number(data.revenue), 
         online: Number(data.online), 
-        offline: Number(data.revenue) - Number(data.online), 
         orders: Number(data.orders) 
       },
       costs: { 
@@ -132,28 +211,41 @@ const App: React.FC = () => {
         packaging: Number(data.packaging), 
         discounts: Number(data.discounts) 
       },
-      topItems: data.menuItems?.slice(0, 3).map((i: any) => i.name) || [],
-      menuItems: (data.menuItems || []).map((i: any) => ({
-        name: i.name,
-        price: Number(i.price || 0),
-        cost: Number(i.cost || 0),
-        sold: Number(i.sold || 0),
-        contribution: (Number(i.price || 0) - Number(i.cost || 0)) * Number(i.sold || 0),
-        popularityRank: 0,
-        profitRank: 0
-      })),
+      topItems: (data.menuItems || []).slice(0, 3).map((i: any) => i.name),
+      menuItems: data.menuItems,
       dataQualityScore: Number(data.dataQualityScore)
     };
-    setRecords(prev => ({ ...prev, [selectedClientId]: [newRecord, ...(prev[selectedClientId] || [])].slice(0, 12) }));
-    setClients(prev => prev.map(c => c.id === selectedClientId ? { ...c, lastUpdatedAt: new Date().toISOString() } : c));
+
+    // Pass through unified pipeline
+    const normalized = normalizeMonthlyRecord(rawRecord);
+
+    setRecords(prev => ({ 
+      ...prev, 
+      [selectedClientId]: [normalized, ...(prev[selectedClientId] || [])].slice(0, 12) 
+    }));
+    
+    setClients(prev => prev.map(c => 
+      c.id === selectedClientId ? { ...c, lastUpdatedAt: new Date().toISOString() } : c
+    ));
+    
     setActiveTab('analysis');
   };
 
   const handleDeleteClient = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
-    if (!confirm("Remove this client from the terminal?")) return;
+    if (!window.confirm("Are you sure you want to permanently remove this restaurant? This cannot be undone.")) return;
+    
     setClients(prev => prev.filter(c => c.id !== id));
-    if (selectedClientId === id) setSelectedClientId(null);
+    setRecords(prev => {
+      const newRecs = { ...prev };
+      delete newRecs[id];
+      return newRecs;
+    });
+    
+    if (selectedClientId === id) {
+      setSelectedClientId(null);
+    }
   };
 
   const handleFetchAiInsights = async () => {
@@ -275,8 +367,15 @@ const App: React.FC = () => {
                 ))}
               </div>
             </div>
-            <div className="flex gap-4">
-              <button onClick={() => setShowNewClientForm(true)} className="bg-blue-600 text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              <label className="cursor-pointer bg-white border border-slate-200 text-slate-600 px-6 py-4 rounded-2xl font-black text-xs shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2">
+                <Database className="w-4 h-4" /> Restore JSON
+                <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
+              </label>
+              <button onClick={handleExportBackup} className="bg-white border border-slate-200 text-slate-600 px-6 py-4 rounded-2xl font-black text-xs shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2">
+                <Download className="w-4 h-4" /> Backup JSON
+              </button>
+              <button onClick={() => setShowNewClientForm(true)} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2">
                 <Plus className="w-5 h-5" /> Add New Client
               </button>
             </div>
@@ -292,7 +391,10 @@ const App: React.FC = () => {
                     {client.status}
                   </div>
                   <div className="flex items-center gap-3">
-                    <Trash2 onClick={(e) => handleDeleteClient(client.id, e)} className="w-5 h-5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100" />
+                    <Trash2 
+                      onClick={(e) => handleDeleteClient(client.id, e)} 
+                      className="w-5 h-5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer p-1 rounded-md hover:bg-rose-50" 
+                    />
                   </div>
                 </div>
 
@@ -348,19 +450,35 @@ const App: React.FC = () => {
                       <input id="new-city" placeholder="Hyderabad" className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-[2rem] font-bold text-sm outline-none focus:border-blue-500 transition-all" />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Cuisine Type</label>
+                      <input id="new-cuisine" placeholder="Mughlai / Continental" className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-[2rem] font-bold text-sm outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Establishment Type</label>
+                      <select id="new-type" className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-[2rem] font-bold text-sm outline-none focus:border-blue-500 transition-all">
+                        <option value="Hybrid">Hybrid (Dine-in + Cloud)</option>
+                        <option value="Dine-in">Dine-in Only</option>
+                        <option value="Cloud">Cloud Kitchen</option>
+                      </select>
+                    </div>
+                  </div>
                </div>
                <div className="flex gap-4">
                   <button onClick={() => setShowNewClientForm(false)} className="flex-1 py-5 bg-slate-100 text-slate-900 rounded-[2rem] font-black uppercase tracking-widest text-[10px]">Cancel</button>
                   <button onClick={() => {
                      const n = (document.getElementById('new-name') as HTMLInputElement).value;
                      const c = (document.getElementById('new-city') as HTMLInputElement).value;
+                     const cuisine = (document.getElementById('new-cuisine') as HTMLInputElement).value;
+                     const type = (document.getElementById('new-type') as HTMLSelectElement).value as any;
                      if(!n || !c) return;
                      const newClient: Client = { 
                        id: `c-${Date.now()}`, 
                        name: n, 
-                       type: 'Hybrid', 
+                       type: type || 'Hybrid', 
                        city: c, 
-                       cuisine: 'Multi-cuisine', 
+                       cuisine: cuisine || 'Multi-cuisine', 
                        pricingLevel: 'Mid', 
                        status: 'pilot', 
                        startMonth: new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), 

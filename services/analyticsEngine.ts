@@ -12,7 +12,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   const onlineDependencyPct = (revenue.online / revenue.total) * 100;
   const discountPct = (costs.discounts / revenue.total) * 100;
 
-  // --- MENU INTELLIGENCE: DYNAMIC RANKING PIPELINE ---
+  // --- MENU INTELLIGENCE ---
   const processedItems: MenuItem[] = menuItems.map(item => {
     const price = Number(item.price) || 0;
     const cost = Number(item.cost) || 0;
@@ -33,7 +33,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
   let bestItem: MenuItem | undefined = rankedMenuItems.find(i => i.profitRank === 1);
   let worstItem: MenuItem | undefined = [...rankedMenuItems].sort((a, b) => (a.cost/a.price) - (b.cost/b.price)).pop();
 
-  // --- DUAL AXIS HEALTH ANALYSIS ---
+  // --- HEALTH ANALYSIS ---
   let financialHealth: PerformanceBandLevel = 'Healthy';
   if (margin < 10) financialHealth = 'Dangerous';
   else if (margin < 18) financialHealth = 'Weak';
@@ -64,7 +64,7 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     driver = isHighDiscount ? 'Revenue Leakage' : (onlineDependencyPct > 55 ? 'Platform Commissions' : 'Menu Costing');
   }
 
-  // --- DELTA CALCULATIONS (MoM) ---
+  // --- DELTA CALCULATIONS ---
   let deltas;
   if (previousRecord) {
     const prevTotalCosts = Object.values(previousRecord.costs).reduce((a, b) => a + Number(b), 0);
@@ -87,28 +87,28 @@ export function runAnalyticsEngine(currentRecord: MonthlyRecord, previousRecord?
     };
   }
 
-  // --- ATTENTION SCORE CALCULATION (0-100) ---
-  const qualityPenalty = (100 - currentRecord.dataQualityScore) * 0.35; // Max 35
-  const riskPenalty = riskLevel === 'High' ? 35 : riskLevel === 'Medium' ? 15 : 0; // Max 35
-  const discountPenalty = isHighDiscount ? 15 : 0; // Max 15
-  const volatilityPenalty = deltas ? Math.min(15, Math.abs(deltas.margin) * 3 + Math.abs(deltas.onlineDependency) * 1) : 0; // Max 15
+  // --- ATTENTION SCORE ---
+  const qualityPenalty = (100 - currentRecord.dataQualityScore) * 0.35;
+  const riskPenalty = riskLevel === 'High' ? 35 : riskLevel === 'Medium' ? 15 : 0;
+  const discountPenalty = isHighDiscount ? 15 : 0;
+  const volatilityPenalty = deltas ? Math.min(15, Math.abs(deltas.margin) * 3 + Math.abs(deltas.onlineDependency) * 1) : 0;
 
   const attentionScore = Math.min(100, qualityPenalty + riskPenalty + discountPenalty + volatilityPenalty);
 
   const narrative = {
-    health: `Business is ${financialHealth} financially and ${structuralResilience} structurally.`,
+    health: `Business is ${financialHealth.toLowerCase()} financially and ${structuralResilience.toLowerCase()} structurally. Efficiency index is ${margin.toFixed(0)}%.`,
     change: isHighDiscount 
-      ? `Promotional spending is high at ${discountPct.toFixed(1)}% of revenue. This is a primary leakage point.`
+      ? `Promotional spending is high at ${discountPct.toFixed(1)}% of revenue. Digital platforms are currently capturing a large share of value.`
       : (bestItem 
-        ? `${bestItem.name} is driving ${((bestItem.contribution/revenue.total)*100).toFixed(1)}% of total revenue contribution.`
-        : 'Initial pilot baseline created.'),
+        ? `${bestItem.name} is the primary profit anchor, contributing ${((bestItem.contribution/revenue.total)*100).toFixed(1)}% of total revenue.`
+        : 'Initial performance baseline established.'),
     action: isHighDiscount 
-      ? 'Audit platform-wide "Auto-Apply" coupons. Set a hard ceiling of 8% for promotional burn.'
+      ? 'Audit all active platform coupons. Cap promotional burn at 8% and prioritize direct-to-consumer loyalty efforts.'
       : (worstItem && (worstItem.cost/worstItem.price) > 0.45
-        ? `Audit prep waste for ${worstItem.name} immediately; margin is ${((1 - worstItem.cost/worstItem.price)*100).toFixed(1)}%.`
+        ? `Immediate audit required for ${worstItem.name}. Current unit margin of ${((1 - worstItem.cost/worstItem.price)*100).toFixed(1)}% is below industry average.`
         : level === 'Healthy' 
-          ? 'Maintain current procurement standards while scaling marketing.' 
-          : `Prioritize ${driver} optimization to move health to the next band.`)
+          ? 'Operations stable. Focus on scaling marketing spend to 5-7% of revenue to drive new customer acquisition.' 
+          : `Prioritize ${driver} optimization to move overall business health to the next efficiency band.`)
   };
 
   return {
