@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { BusinessSummary, AiInsight, InsightHistoryItem } from './types';
 
@@ -8,25 +9,25 @@ export const generateInsights = async (
   topItems: string[] = [],
   history: InsightHistoryItem[] = []
 ): Promise<AiInsight[]> => {
-  // Obtain API key exclusively from process.env.API_KEY as per guidelines
+  // Obtain API key exclusively from process.env.API_KEY
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
-    console.warn("Gemini API Key missing in process.env.API_KEY.");
+    console.warn("Gemini API Key missing.");
     return [{
-      observation: "AI Engine Offline",
+      observation: "API Key Rejected",
       importance: "System Configuration Issue",
-      recommendation: "Please ensure your Google Gemini API Key is correctly configured in the platform settings.",
+      recommendation: "Please initialize your official API connection in the insights tab.",
       impactPotential: "Low",
       confidenceScore: 0,
-      confidenceReason: "API_KEY not found",
+      confidenceReason: "API_KEY not found in process.env",
       promptVersion: PROMPT_VERSION
     }];
   }
 
+  // Create instance right before call as per requirements
   const ai = new GoogleGenAI({ apiKey });
   
-  // Safe metrics calculation
   const metrics = {
     netMargin: `${(summary.margin || 0).toFixed(1)}%`,
     foodCost: `${(summary.foodCostPct || 0).toFixed(1)}%`,
@@ -38,7 +39,6 @@ export const generateInsights = async (
     bestItem: summary.bestItem?.name || 'N/A'
   };
 
-  // Safe data joiners
   const safeTopItems = Array.isArray(topItems) ? topItems : [];
   const topSellersText = safeTopItems.length > 0 ? safeTopItems.join(', ') : "No data";
 
@@ -94,15 +94,17 @@ export const generateInsights = async (
   } catch (error: any) {
     console.error("OBIS SDK ERROR:", error);
     
-    // Check for specific API Key invalidation
-    const isInvalidKey = error?.message?.includes("API key not valid") || error?.status === "INVALID_ARGUMENT";
+    // Catch auth failures specifically
+    const isInvalidKey = error?.message?.includes("API key not valid") || 
+                        error?.status === "INVALID_ARGUMENT" ||
+                        error?.message?.includes("not found");
 
     return [{
       observation: isInvalidKey ? "API Key Rejected" : "AI Analysis Failed",
       importance: isInvalidKey ? "Authentication Failure" : "Service Interruption",
       recommendation: isInvalidKey 
-        ? "The provided API key is invalid or has expired. Please update it in your project configuration." 
-        : "The AI engine encountered an error. Please try again in a few minutes.",
+        ? "The provided API key is invalid or has expired. Please update it using the repair button." 
+        : "The AI engine encountered an error. Please try again.",
       impactPotential: "None",
       confidenceScore: 0,
       confidenceReason: error instanceof Error ? error.message : "Internal Error",
