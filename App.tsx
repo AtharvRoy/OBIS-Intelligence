@@ -1,14 +1,13 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Plus, ArrowLeft, ShieldCheck, ArrowRight, Sparkles, Download, 
-  RefreshCw, Trash2, FileText, CheckCircle2, XCircle, FileInput, BarChart3, Lightbulb, Monitor, Upload, History, Zap, Target, Star, HelpCircle, Activity, LayoutGrid, IndianRupee, ShieldAlert, Save, Eye, Users, Utensils, TrendingUp, Filter, Calendar, AlertCircle, Info, Database, Link2Off, Key
+  RefreshCw, Trash2, FileText, CheckCircle2, XCircle, FileInput, BarChart3, Lightbulb, Monitor, Upload, History, Zap, Target, Star, HelpCircle, Activity, LayoutGrid, IndianRupee, ShieldAlert, Save, Eye, Users, Utensils, TrendingUp, Filter, Calendar, AlertCircle, Info, Database, Link2Off, Key, Settings
 } from 'lucide-react';
 import { AnalystConsole } from './components/AnalystConsole';
 import { Dashboard } from './components/Dashboard';
 import { DataInputForm } from './components/DataInputForm';
 import { MenuIntelligence } from './components/MenuIntelligence';
-import { Client, MonthlyRecord, BusinessSummary, DecisionStatus, DecisionLogEntry, AiInsight, MenuItem, ClientStatus } from './types';
+import { Client, MonthlyRecord, BusinessSummary, DecisionStatus, DecisionLogEntry, AiInsight, MenuItem, ClientStatus, RevenueData, CostCategory } from './types';
 import { generateInsights } from './geminiService';
 import { runAnalyticsEngine } from './services/analyticsEngine';
 import { MOCK_CLIENTS, MOCK_RECORDS, BENCHMARKS } from './constants';
@@ -34,6 +33,7 @@ const App: React.FC = () => {
   const [loggedDecisions, setLoggedDecisions] = useState<Set<string>>(new Set());
   const [lifecycleFilter, setLifecycleFilter] = useState<ClientStatus | 'all'>('all');
   const [isApiAuthError, setIsApiAuthError] = useState(false);
+  const [isLocalEnv, setIsLocalEnv] = useState(false);
 
   // --- UNIFIED DATA PIPELINE ---
   const normalizeMonthlyRecord = (record: any): MonthlyRecord => {
@@ -82,6 +82,25 @@ const App: React.FC = () => {
     return runAnalyticsEngine(activeRecord, previousRecord);
   }, [activeRecord, previousRecord]);
 
+  const dashboardData = useMemo(() => {
+    if (!activeRecord) return null;
+    return {
+      revenue: [
+        { channel: 'Online', gross: activeRecord.revenue.online, net: activeRecord.revenue.online * 0.82 },
+        { channel: 'Offline', gross: activeRecord.revenue.offline, net: activeRecord.revenue.offline * 0.96 }
+      ] as RevenueData[],
+      costs: [
+        { name: 'Food', value: activeRecord.costs.food },
+        { name: 'Staff', value: activeRecord.costs.staff },
+        { name: 'Rent', value: activeRecord.costs.rent },
+        { name: 'Utilities', value: activeRecord.costs.utilities },
+        { name: 'Marketing', value: activeRecord.costs.marketing },
+        { name: 'Packaging', value: activeRecord.costs.packaging },
+        { name: 'Discounts', value: activeRecord.costs.discounts }
+      ] as CostCategory[]
+    };
+  }, [activeRecord]);
+
   const portfolioStats = useMemo(() => {
     return clients
       .filter(c => lifecycleFilter === 'all' || c.status === lifecycleFilter)
@@ -100,54 +119,36 @@ const App: React.FC = () => {
       .sort((a, b) => b.score - a.score);
   }, [clients, records, lifecycleFilter]);
 
-  const menuQuadrants = useMemo(() => {
-    if (!summary?.rankedMenuItems || summary.rankedMenuItems.length === 0) return { stars: [], puzzles: [], horses: [], dogs: [] };
-    const items = summary.rankedMenuItems;
-    const avgSold = items.reduce((acc, i) => acc + i.sold, 0) / items.length;
-    const avgProfit = items.reduce((acc, i) => acc + (i.contribution / i.sold), 0) / items.length;
-    return {
-      stars: items.filter(i => i.sold >= avgSold && (i.contribution / i.sold) >= avgProfit),
-      puzzles: items.filter(i => i.sold < avgSold && (i.contribution / i.sold) >= avgProfit),
-      horses: items.filter(i => i.sold >= avgSold && (i.contribution / i.sold) < avgProfit),
-      dogs: items.filter(i => i.sold < avgSold && (i.contribution / i.sold) < avgProfit)
-    };
-  }, [summary]);
-
-  const dashboardData = useMemo(() => {
-    if (!activeRecord) return null;
-    return {
-      revenue: [
-        { channel: 'Online', gross: Number(activeRecord.revenue?.online) || 0, net: (Number(activeRecord.revenue?.online) || 0) * 0.72 },
-        { channel: 'Offline', gross: Number(activeRecord.revenue?.offline) || 0, net: (Number(activeRecord.revenue?.offline) || 0) * 0.95 }
-      ],
-      costs: [
-        { name: 'Food', value: Number(activeRecord.costs?.food) || 0 },
-        { name: 'Staff', value: Number(activeRecord.costs?.staff) || 0 },
-        { name: 'Rent', value: Number(activeRecord.costs?.rent) || 0 },
-        { name: 'Marketing', value: Number(activeRecord.costs?.marketing) || 0 },
-        { name: 'Packaging', value: Number(activeRecord.costs?.packaging) || 0 },
-        { name: 'Utilities', value: Number(activeRecord.costs?.utilities) || 0 },
-        { name: 'Discounts', value: Number(activeRecord.costs?.discounts) || 0 }
-      ]
-    };
-  }, [activeRecord]);
-
   // 3. EFFECT HOOKS
   useEffect(() => { localStorage.setItem('OBIS_CLIENTS', JSON.stringify(clients)); }, [clients]);
   useEffect(() => { localStorage.setItem('OBIS_RECORDS', JSON.stringify(records)); }, [records]);
-  useEffect(() => { setLoggedDecisions(new Set()); if (selectedClientId) { setActiveTab('analysis'); setMeetingMode(false); setIsApiAuthError(false); } }, [selectedClientId]);
+  useEffect(() => { 
+    setLoggedDecisions(new Set()); 
+    if (selectedClientId) { 
+      setActiveTab('analysis'); 
+      setMeetingMode(false); 
+      setIsApiAuthError(false); 
+      // Detection of local vs platform environment
+      setIsLocalEnv(!(window as any).aistudio);
+    } 
+  }, [selectedClientId]);
 
   // 4. HANDLERS
   const handleRepairApiKey = async () => {
-    try {
-      if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
-        await window.aistudio.openSelectKey();
+    const aiStudio = (window as any).aistudio;
+    if (aiStudio && typeof aiStudio.openSelectKey === 'function') {
+      try {
+        await aiStudio.openSelectKey();
         setIsApiAuthError(false);
         setLoadingInsights(false);
-      } else {
-        alert("API Key selection interface is currently unavailable.");
+        alert("Key selection opened. After selecting, please try analyzing again.");
+      } catch (e) {
+        console.error("Failed to open key selector:", e);
       }
-    } catch (e) { console.error("Failed to open key selector:", e); }
+    } else {
+      setIsLocalEnv(true);
+      alert("Platform API tools are not detected in your current environment (Localhost/Electron). Please check the instructions on screen.");
+    }
   };
 
   const handleExportBackup = () => {
@@ -260,6 +261,12 @@ const App: React.FC = () => {
     }
   };
 
+  const getPriorityColor = (score: number) => {
+    if (score >= 75) return 'bg-rose-50 text-rose-600 border-rose-100';
+    if (score >= 40) return 'bg-amber-50 text-amber-600 border-amber-100';
+    return 'bg-blue-50 text-blue-600 border-blue-100';
+  };
+
   const getHealthColor = (health: string) => {
     switch (health) {
       case 'Healthy': return 'bg-emerald-100 text-emerald-700';
@@ -269,18 +276,18 @@ const App: React.FC = () => {
     }
   };
 
-  const getPriorityColor = (score: number) => {
-    if (score >= 75) return 'text-rose-600 bg-rose-50 border-rose-100';
-    if (score >= 40) return 'text-amber-600 bg-amber-50 border-amber-100';
-    return 'text-blue-600 bg-blue-50 border-blue-100';
-  };
-
   const getConfidenceLevel = (rawScore: number) => {
-    // Normalize score: Handle both 0-1 and 0-100 ranges
-    const score = rawScore <= 1 ? rawScore * 100 : rawScore;
-    if (score >= 85) return { label: 'High', color: 'text-emerald-500 bg-emerald-50 border-emerald-100', value: Math.round(score) };
-    if (score >= 60) return { label: 'Medium', color: 'text-blue-500 bg-blue-50 border-blue-100', value: Math.round(score) };
-    return { label: 'Low', color: 'text-rose-500 bg-rose-50 border-rose-100', value: Math.round(score) };
+    // Correcting the percentage display bug. 
+    // Logic: If AI returns 0.94, it means 94%. If it returns 94, it means 94%.
+    let score = Number(rawScore) || 0;
+    if (score > 0 && score <= 1) {
+      score = score * 100;
+    }
+    const rounded = Math.round(score);
+    
+    if (rounded >= 85) return { label: 'High', color: 'text-emerald-500 bg-emerald-50 border-emerald-100', value: rounded };
+    if (rounded >= 60) return { label: 'Medium', color: 'text-blue-500 bg-blue-50 border-blue-100', value: rounded };
+    return { label: 'Low', color: 'text-rose-500 bg-rose-50 border-rose-100', value: rounded };
   };
 
   if (!isLoggedIn) {
@@ -316,7 +323,7 @@ const App: React.FC = () => {
           </header>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {portfolioStats.map(({ client, score, health, risk }) => (
+            {portfolioStats.map(({ client, score, health }) => (
               <div key={client.id} onClick={() => setSelectedClientId(client.id)} className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all text-left relative group flex flex-col h-full overflow-hidden cursor-pointer">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-blue-600 opacity-[0.02] rounded-full blur-3xl group-hover:scale-150 transition-all"></div>
                 <div className="flex justify-between items-start mb-10 relative z-10">
@@ -410,9 +417,9 @@ const App: React.FC = () => {
 
         <div className="p-10 lg:p-14 max-w-7xl mx-auto w-full pb-24 no-print">
           {activeTab === 'input' && <DataInputForm onSave={handleSaveData} initialData={activeRecord} />}
-          {activeTab === 'analysis' && summary && dashboardData && (
+          {activeTab === 'analysis' && summary && (
             <div className="space-y-16">
-              {!meetingMode && <Dashboard summary={summary} revenue={dashboardData.revenue} costs={dashboardData.costs} />}
+              {!meetingMode && <Dashboard summary={summary} revenue={dashboardData?.revenue || []} costs={dashboardData?.costs || []} />}
               <AnalystConsole summary={summary} meetingMode={meetingMode} />
               {!meetingMode && summary.rankedMenuItems && <MenuIntelligence menu={summary.rankedMenuItems} />}
             </div>
@@ -422,22 +429,38 @@ const App: React.FC = () => {
                <div className="bg-slate-900 rounded-[3.5rem] p-20 text-white shadow-2xl relative overflow-hidden">
                  <div className="absolute top-0 right-0 p-20 opacity-10"><Sparkles className="w-40 h-40" /></div>
                  <div className="relative z-10 max-w-2xl">
-                   <h3 className="text-6xl font-black mb-8 tracking-tighter">AI Intelligence</h3>
+                   <h3 className="text-6xl font-black mb-8 tracking-tighter text-white">AI Intelligence</h3>
                    <p className="text-slate-400 font-medium mb-10 text-xl leading-relaxed">The engine analyzes metrics vs. benchmarks and considers previous approved actions to ensure consistent growth advice.</p>
-                   <button onClick={handleFetchAiInsights} disabled={loadingInsights} className="px-14 py-6 bg-blue-600 rounded-[2rem] font-black text-lg transition-all flex items-center gap-4 disabled:opacity-50 hover:bg-blue-700 shadow-2xl shadow-blue-900/40">
+                   <button onClick={handleFetchAiInsights} disabled={loadingInsights} className="px-14 py-6 bg-blue-600 text-white rounded-[2rem] font-black text-lg transition-all flex items-center gap-4 disabled:opacity-50 hover:bg-blue-700 shadow-2xl shadow-blue-900/40">
                       {loadingInsights ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />} {loadingInsights ? 'Drafting Mandates...' : 'Start Logic Analysis'}
                    </button>
                  </div>
                </div>
 
                {isApiAuthError && (
-                 <div className="bg-rose-50 border-2 border-rose-100 rounded-[3rem] p-12 flex flex-col items-center text-center space-y-6 animate-in zoom-in-95 duration-300">
-                    <div className="w-20 h-20 bg-rose-100 rounded-3xl flex items-center justify-center text-rose-600 shadow-sm"><Key className="w-10 h-10" /></div>
-                    <div className="max-w-md">
-                      <h3 className="text-3xl font-black text-slate-900 mb-2">AI Authentication Failed</h3>
-                      <p className="text-slate-500 font-medium">Authentication required. Please repair your API connection to continue.</p>
+                 <div className="bg-white border-2 border-rose-100 rounded-[3rem] p-16 shadow-xl flex flex-col items-center text-center space-y-8 animate-in zoom-in-95 duration-300">
+                    <div className="w-24 h-24 bg-rose-50 rounded-3xl flex items-center justify-center text-rose-500 shadow-sm border border-rose-100"><Key className="w-10 h-10" /></div>
+                    <div className="max-w-md space-y-4">
+                      <h3 className="text-4xl font-black text-slate-900 tracking-tight">AI Connection Failed</h3>
+                      <p className="text-slate-500 font-bold leading-relaxed">Authentication rejected. This usually means the API key is invalid or your dev server isn't passing it correctly to the browser.</p>
                     </div>
-                    <button onClick={handleRepairApiKey} className="px-12 py-5 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center gap-3 hover:bg-rose-700 shadow-xl shadow-rose-200 transition-all active:scale-95"><RefreshCw className="w-4 h-4" /> Initialize Official API Connection</button>
+                    
+                    {!isLocalEnv ? (
+                      <button onClick={handleRepairApiKey} className="px-12 py-6 bg-rose-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs flex items-center gap-3 hover:bg-rose-700 shadow-2xl shadow-rose-200 transition-all active:scale-95">
+                        <RefreshCw className="w-5 h-5" /> Repair Official AI Connection
+                      </button>
+                    ) : (
+                      <div className="bg-slate-50 p-10 rounded-[2.5rem] border border-slate-200 text-left w-full space-y-6">
+                        <div className="flex items-center gap-3 text-amber-600 font-black text-[10px] uppercase tracking-widest"><Settings className="w-4 h-4" /> Local Debug Notes</div>
+                        <p className="text-sm font-bold text-slate-600 leading-relaxed">If your .env key is not working, try this diagnostic:</p>
+                        <ol className="text-xs font-bold text-slate-500 space-y-3 list-decimal pl-5">
+                          <li>Check your browser console (F12) for the exact error from Google.</li>
+                          <li>Ensure your dev server (e.g. Vite/Webpack) is configured to expose <code className="bg-slate-200 px-2 py-0.5 rounded text-rose-600">process.env</code> variables.</li>
+                          <li>As a quick test, you can run <code className="bg-slate-200 px-2 py-0.5 rounded text-rose-600">process.env.API_KEY = 'your-key'</code> directly in the console and try again.</li>
+                        </ol>
+                        <p className="text-[10px] text-slate-400 italic font-bold">Note: The "Repair" button only works within the AI Studio host.</p>
+                      </div>
+                    )}
                  </div>
                )}
 
@@ -451,12 +474,23 @@ const App: React.FC = () => {
                         const confidence = getConfidenceLevel(ins.confidenceScore);
                         return (
                           <div key={idx} className={`bg-white p-12 rounded-[4rem] border transition-all ${hasBeenLogged ? 'border-emerald-200 bg-emerald-50/20 opacity-80' : 'border-slate-200 shadow-xl'}`}>
-                            <div className="flex justify-between items-center mb-8"><div className="flex flex-col gap-1"><span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border ${confidence.color}`}>Confidence: {confidence.label} ({confidence.value}%)</span><p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter ml-1 leading-tight"><Info className="w-2 h-2 inline mr-1" /> {ins.confidenceReason}</p></div>{hasBeenLogged && <CheckCircle2 className="w-8 h-8 text-emerald-500" />}</div>
+                            <div className="flex justify-between items-center mb-8">
+                              <div className="flex flex-col gap-1">
+                                <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border ${confidence.color}`}>Confidence: {confidence.label} ({confidence.value}%)</span>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter ml-1 leading-tight"><Info className="w-2 h-2 inline mr-1" /> {ins.confidenceReason}</p>
+                              </div>
+                              {hasBeenLogged && <CheckCircle2 className="w-8 h-8 text-emerald-500" />}
+                            </div>
                             <h4 className="text-2xl font-black mb-6 leading-tight text-slate-900">{ins.observation}</h4>
                             <p className="text-slate-500 mb-10 text-sm font-medium leading-relaxed">{ins.importance}</p>
                             <div className="p-10 bg-slate-950 rounded-[3rem] text-white">
-                              <p className="text-xl font-black italic leading-tight mb-8">"{ins.recommendation}"</p>
-                              {!hasBeenLogged && <div className="flex gap-4"><button onClick={() => handleLogDecision(ins, 'Accepted', insightId)} className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600">Approve</button><button onClick={() => handleLogDecision(ins, 'Rejected', insightId)} className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-700">Dismiss</button></div>}
+                              <p className="text-xl font-black italic leading-tight mb-8 text-white">"{ins.recommendation}"</p>
+                              {!hasBeenLogged && (
+                                <div className="flex gap-4">
+                                  <button onClick={() => handleLogDecision(ins, 'Accepted', insightId)} className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all">Approve</button>
+                                  <button onClick={() => handleLogDecision(ins, 'Rejected', insightId)} className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-700 transition-all">Dismiss</button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
@@ -464,7 +498,6 @@ const App: React.FC = () => {
                    </div>
                  </div>
                )}
-               {/* Previous context sections... */}
             </div>
           )}
           {activeTab === 'export' && (
@@ -477,13 +510,47 @@ const App: React.FC = () => {
           )}
         </div>
 
+        {/* PRINT PDF SECTION */}
         {summary && activeClient && activeRecord && (
           <div className="print-only">
-            <div className="pdf-page">
-              <header className="flex justify-between items-end pb-12 border-b-[6px] border-slate-900 mb-16"><div className="space-y-3"><div className="text-[12px] font-black uppercase text-blue-600 tracking-[0.5em]">STRATEGIC AUDIT</div><h1 className="text-6xl font-black tracking-tighter uppercase leading-[0.9] print-text-huge">{activeClient.name}</h1><p className="text-lg font-bold text-slate-400 uppercase tracking-[0.3em]">{activeRecord.month.toUpperCase()} PERFORMANCE CYCLE</p></div><div className="text-[6rem] font-black italic text-slate-900 leading-none">O</div></header>
-              <div className="pdf-section"><h2 className="text-3xl font-black mb-10 uppercase border-l-[1rem] border-blue-600 pl-8 print-text-large">Profitability Matrix</h2><div className="grid grid-cols-2 gap-10"><div className="pdf-card"><p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Gross Revenue</p><p className="text-5xl font-black print-text-huge">₹{(summary.revenue / 100000).toFixed(1)}L</p>{summary.deltas && (<div className={`flex items-center gap-2 mt-4 font-black ${summary.deltas.revenue >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{summary.deltas.revenue >= 0 ? <TrendingUp className="w-4 h-4" /> : <Activity className="w-4 h-4" />}{summary.deltas.revenue >= 0 ? '+' : ''}{summary.deltas.revenue.toFixed(1)}% vs. Prev</div>)}</div><div className="pdf-card"><p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Net Efficiency</p><p className={`text-5xl font-black print-text-huge ${summary.margin > 15 ? 'text-emerald-600' : 'text-rose-600'}`}>{summary.margin.toFixed(0)}%</p><p className="text-sm font-black text-slate-400 mt-4 tracking-widest uppercase opacity-60">Operating Margin</p></div></div></div>
-              <div className="pdf-section flex-1 mt-10"><h2 className="text-3xl font-black mb-10 uppercase border-l-[1rem] border-emerald-500 pl-8 print-text-large">AI Strategic Roadmap</h2><div className="space-y-8">{(activeClient.currentInsights || []).slice(0, 3).map((ins, i) => { const confidence = getConfidenceLevel(ins.confidenceScore); return (<div key={i} className="pdf-card border-l-[1.5rem] border-blue-600 bg-white rounded-r-[3rem] rounded-l-none shadow-sm"><div className="flex items-start gap-6 mb-4"><div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-2xl shrink-0">{i+1}</div><div className="flex-1 space-y-2"><div className="flex justify-between items-center mb-2"><h4 className="text-2xl font-black text-slate-900 leading-tight">{ins.observation}</h4><div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${confidence.color}`}>{confidence.label} Confidence ({confidence.value}%)</div></div><div className="p-8 bg-blue-50/70 rounded-[2.5rem] border border-blue-100/50 mt-4"><p className="text-xl font-black text-slate-900 leading-snug print-text-med italic">"{ins.recommendation}"</p><p className="text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-tighter">Logic Validation: {ins.confidenceReason}</p></div></div></div></div>); })}</div></div>
-              <footer className="pt-10 border-t border-slate-200 flex justify-between items-center text-[11px] font-black text-slate-400 uppercase tracking-widest"><span>OBIS Intelligence System v1.6.5</span><span>Page 01 // Executive Snapshot</span></footer>
+             <div className="pdf-page">
+              <header className="flex justify-between items-end pb-8 border-b-[4px] border-slate-900 mb-8">
+                <div className="space-y-2">
+                  <div className="text-[10px] font-black uppercase text-blue-600 tracking-[0.4em]">STRATEGIC AUDIT</div>
+                  <h1 className="text-5xl font-black tracking-tighter uppercase leading-[0.9] print-text-huge">{activeClient.name}</h1>
+                  <p className="text-base font-bold text-slate-400 uppercase tracking-[0.2em]">{activeRecord.month.toUpperCase()} PERFORMANCE CYCLE</p>
+                </div>
+                <div className="text-[4rem] font-black italic text-slate-900 leading-none">O</div>
+              </header>
+              <div className="pdf-section flex-1">
+                <h2 className="text-2xl font-black mb-6 uppercase border-l-[0.75rem] border-emerald-500 pl-6 print-text-large">AI Strategic Roadmap</h2>
+                <div className="space-y-6">
+                  {(activeClient.currentInsights || []).slice(0, 3).map((ins, i) => { 
+                    const confidence = getConfidenceLevel(ins.confidenceScore); 
+                    return (
+                      <div key={i} className="pdf-card border-l-[1rem] border-blue-600 bg-white rounded-r-[2rem] rounded-l-none shadow-sm">
+                        <div className="flex items-start gap-5">
+                          <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-xl shrink-0">{i+1}</div>
+                          <div className="flex-1 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <h4 className="text-xl font-black text-slate-900 leading-tight">{ins.observation}</h4>
+                              <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${confidence.color}`}>{confidence.label} ({confidence.value}%)</div>
+                            </div>
+                            <div className="p-6 bg-blue-50/50 rounded-[2rem] border border-blue-100/30 mt-2">
+                              <p className="text-lg font-black text-slate-900 leading-snug print-text-med italic">"{ins.recommendation}"</p>
+                              <p className="text-[9px] font-bold text-slate-400 mt-3 uppercase tracking-tighter">Logic Validation: {ins.confidenceReason}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ); 
+                  })}
+                </div>
+              </div>
+              <footer className="pt-6 border-t border-slate-200 flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                <span>OBIS Intelligence System v1.6.5</span>
+                <span>Page 01 // Executive Snapshot</span>
+              </footer>
             </div>
           </div>
         )}

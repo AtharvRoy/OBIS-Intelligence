@@ -34,30 +34,31 @@
             .pdf-page {
                 page-break-after: always !important;
                 break-after: page !important;
-                padding: 3rem !important;
-                height: 297mm;
+                padding: 20mm !important;
+                min-height: 297mm;
                 width: 210mm;
                 margin: 0 auto;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
                 position: relative;
+                background: white !important;
             }
 
             .pdf-section { 
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
-                margin-bottom: 3rem !important;
+                margin-bottom: 2rem !important;
             }
             
             .pdf-card {
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 border: 1px solid #e2e8f0 !important;
-                border-radius: 2.5rem !important;
-                padding: 2rem !important;
+                border-radius: 1.5rem !important;
+                padding: 1.5rem !important;
                 background: #f8fafc !important;
-                margin-bottom: 1.5rem;
+                margin-bottom: 1rem;
             }
 
             @page {
@@ -65,9 +66,9 @@
                 margin: 0;
             }
             
-            .print-text-huge { font-size: 3.5rem !important; line-height: 1 !important; }
-            .print-text-large { font-size: 2rem !important; }
-            .print-text-med { font-size: 1.25rem !important; }
+            .print-text-huge { font-size: 3rem !important; line-height: 1 !important; }
+            .print-text-large { font-size: 1.75rem !important; }
+            .print-text-med { font-size: 1.1rem !important; }
         }
         
         .print-only { display: none; }

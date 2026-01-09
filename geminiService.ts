@@ -12,15 +12,21 @@ export const generateInsights = async (
   // Obtain API key exclusively from process.env.API_KEY
   const apiKey = process.env.API_KEY;
 
-  if (!apiKey) {
-    console.warn("Gemini API Key missing.");
+  // Validate the key isn't a placeholder, undefined, or empty
+  const isValidKeyFormat = apiKey && 
+                         apiKey !== 'undefined' && 
+                         apiKey !== 'null' && 
+                         apiKey.length > 5;
+
+  if (!isValidKeyFormat) {
+    console.warn("Gemini API Key missing or invalid format in process.env.API_KEY");
     return [{
       observation: "API Key Rejected",
       importance: "System Configuration Issue",
-      recommendation: "Please initialize your official API connection in the insights tab.",
+      recommendation: "The application cannot find a valid API key. Please use the 'Repair' button if in AI Studio, or check your local .env file.",
       impactPotential: "Low",
       confidenceScore: 0,
-      confidenceReason: "API_KEY not found in process.env",
+      confidenceReason: "API_KEY is missing, placeholder, or not a valid string.",
       promptVersion: PROMPT_VERSION
     }];
   }
@@ -60,6 +66,7 @@ export const generateInsights = async (
     Instructions:
     Return exactly 3 strategic business insights as a JSON array. 
     Each insight needs: observation, importance, recommendation, impactPotential, confidenceScore, confidenceReason.
+    The confidenceScore should be an integer between 0 and 100.
   `;
 
   try {
@@ -95,19 +102,20 @@ export const generateInsights = async (
     console.error("OBIS SDK ERROR:", error);
     
     // Catch auth failures specifically
-    const isInvalidKey = error?.message?.includes("API key not valid") || 
-                        error?.status === "INVALID_ARGUMENT" ||
-                        error?.message?.includes("not found");
+    const errString = error instanceof Error ? error.message : JSON.stringify(error);
+    const isInvalidKey = errString.toLowerCase().includes("api key not valid") || 
+                        errString.includes("INVALID_ARGUMENT") ||
+                        errString.includes("400");
 
     return [{
       observation: isInvalidKey ? "API Key Rejected" : "AI Analysis Failed",
       importance: isInvalidKey ? "Authentication Failure" : "Service Interruption",
       recommendation: isInvalidKey 
-        ? "The provided API key is invalid or has expired. Please update it using the repair button." 
+        ? "The API key provided is being rejected by Google. Ensure you have entered a valid key from Google AI Studio." 
         : "The AI engine encountered an error. Please try again.",
       impactPotential: "None",
       confidenceScore: 0,
-      confidenceReason: error instanceof Error ? error.message : "Internal Error",
+      confidenceReason: errString,
       promptVersion: PROMPT_VERSION
     }];
   }
